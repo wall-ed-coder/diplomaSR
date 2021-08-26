@@ -74,6 +74,7 @@ class Trainer:
         self.check_all_asserts()
 
     def check_all_asserts(self):
+        # todo add assert that network return needed size as scale_coef
         self.assert_everything_fine_with_memory()
         self.assert_datasets_is_right()
         self.assert_networks_fine()

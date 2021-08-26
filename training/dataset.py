@@ -103,16 +103,16 @@ if __name__ == '__main__':
         root_to_data='/Users/nikita/Downloads/',
         scale_coef=4,
         augmentation=transforms,
-        dataloader_kwargs={'batch_size': 4},
+        dataloader_kwargs={'batch_size': 4, 'num_workers': 4},
     )
 
     dl = DataLoader(ds)
-    for epoch in range(2):
+    for epoch in range(3):
         for batch in dl:
             for sr_img, lr_img in zip(batch['sr_img'], batch['lr_img']):
                 visualize_img_from_array(sr_img)
                 visualize_img_from_array(lr_img)
-                print(sr_img.shape, lr_img.shape)
+                # print(sr_img.shape, lr_img.shape)
         ds.update()
 
 

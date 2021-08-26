@@ -148,7 +148,7 @@ def specific_changing_color_transforms()->A.Compose:
             A.Emboss(alpha=(0.2, 1.), p=0.25),
             A.ElasticTransform(p=0.1),
             A.HueSaturationValue(p=0.1),
-        ], n=2, p=0.05),
+        ], n=2, p=0.07),
     ]
     return A.Compose(transforms)
 
@@ -250,26 +250,6 @@ class ApplyAlbumentation:
 
 # todo исправить баг что постоянно появляются обрезанные какие-то полоски черные + на них даже
 #  накладывается шум что тоже плохо
-# будто изображение реежется и конкатится постоянно
-
-if __name__ == '__main__':
-
-    from utils import open_image_RGB, visualize_img_from_array
-
-    img_paths = [
-        '/Users/nikita/Downloads/165253-nacionalnyj_park_banf-oblako-voda-gidroresursy-rastenie-3840x2160.jpg',
-        # '/Users/nikita/Downloads/orig-3.jpeg',
-        # '/Users/nikita/Downloads/lGpJ56guhdQ.jpg',
-        # '/Users/nikita/Downloads/orig.png',
-        # '/Users/nikita/Downloads/orig.jpeg',
-        # '/Users/nikita/Downloads/0001.png',
-        # '/Users/nikita/Downloads/IMG_1830.jpeg'
-    ]
-    transforms = get_transforms()
-    for img_path in img_paths:
-
-        for i in range(5):
-            img_arr = np.array(open_image_RGB(img_path))
-            after_aug = transforms(image=img_arr)
-            visualize_img_from_array(after_aug)
+#  будто изображение реежется и конкатится постоянно
+#  блюр слишком сильный для маленьких картинок
 
