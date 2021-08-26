@@ -99,7 +99,7 @@ if __name__ == '__main__':
     transforms = ApplyAlbumentation()
 
     ds = CommonSRDataset(
-        csv_path='/Users/nikita/Desktop/diploma_sr2/test_df.csv',
+        csv_path='/test_df.csv',
         root_to_data='/Users/nikita/Downloads/',
         scale_coef=4,
         augmentation=transforms,

@@ -23,7 +23,7 @@ def visualize_img(img_path: str, notebook=True):
 
 def visualize_img_from_array(img_array: Union[np.array, torch.Tensor], transpose=True):
     if isinstance(img_array, torch.Tensor):
-        img_array = img_array.cpu().numpy()
+        img_array = img_array.detach().cpu().numpy()
 
     if transpose:
         img_array = img_array.transpose((1, 2, 0))
