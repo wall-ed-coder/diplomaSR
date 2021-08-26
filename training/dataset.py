@@ -4,10 +4,9 @@ from typing import Optional, Tuple
 import pandas as pd
 import os
 from torch.utils.data import Dataset, DataLoader
-import albumentations as A
 import numpy as np
 
-from utils.preprocessing import SIZES_FOR_CROPS
+from preprocessing.preprocessing import SIZES_FOR_CROPS, ApplyAlbumentation
 from utils.image_utils import open_image_RGB
 
 
@@ -21,17 +20,22 @@ class DataSetMode(Enum):
 class CommonSRDataset(Dataset):
     csv_path: str
     root_to_data: str
-    augmentation_for_SR: A.Compose
-    augmentation_for_LR: A.Compose
+    augmentation: ApplyAlbumentation
+    scale_coef: int
     dataloader_kwargs: dict
     mode: DataSetMode = DataSetMode.VALIDATION
     length: Optional[int] = None
+
     csv_data: pd.DataFrame = None
     current_resize_shape: Tuple[int, int] = None
+    current_resize_shape_lr: Tuple[int, int] = None
 
     def __post_init__(self):
-        # self.csv_data = pd.read_csv(self.csv_path, sep=';')
+        self.csv_data = pd.read_csv(self.csv_path, sep=';')
         self.current_resize_shape = self.get_random_resize_shape()
+        self.current_resize_shape_lr = (
+            self.current_resize_shape[0]//self.scale_coef, self.current_resize_shape[1]//self.scale_coef,
+        )
 
     def get_random_resize_shape(self):
         return SIZES_FOR_CROPS[np.random.choice(len(SIZES_FOR_CROPS))]
@@ -44,13 +48,17 @@ class CommonSRDataset(Dataset):
         img_path = os.path.join(self.root_to_data, img_name)
 
         original_image = open_image_RGB(img_path)
-        preprocessed_SR_img = self.augmentation_for_SR(image=original_image)['image']
+        preprocessed_SR_img = self.augmentation.apply_sr_transform(
+            image=original_image, resize_shape=self.current_resize_shape
+        )
 
-        preprocessed_LR_img = self.augmentation_for_LR(image=preprocessed_SR_img)['image']
+        preprocessed_LR_img = self.augmentation.apply_lr_transform(
+            image=preprocessed_SR_img, resize_shape=self.current_resize_shape_lr
+        )
 
         return {
-            "lr_img": preprocessed_LR_img,
-            "sr_img": preprocessed_SR_img,
+            "lr_img": self.augmentation.apply_transpose_and_standardization(preprocessed_LR_img),
+            "sr_img": self.augmentation.apply_transpose_and_standardization(preprocessed_SR_img),
         }
 
     def __len__(self):
@@ -60,6 +68,9 @@ class CommonSRDataset(Dataset):
 
     def update(self):
         self.current_resize_shape = self.get_random_resize_shape()
+        self.current_resize_shape_lr = (
+            self.current_resize_shape[0]//self.scale_coef, self.current_resize_shape[1]//self.scale_coef,
+        )
 
 
 @dataclass
@@ -83,15 +94,27 @@ class SRDatasets:
 
 
 if __name__ == '__main__':
-    ds = CommonSRDataset(None, None, None, None, None, None, None, None, )
+    from preprocessing import ApplyAlbumentation
+    from utils import visualize_img_from_array
+    transforms = ApplyAlbumentation()
+
+    ds = CommonSRDataset(
+        csv_path='/Users/nikita/Desktop/diploma_sr2/test_df.csv',
+        root_to_data='/Users/nikita/Downloads/',
+        scale_coef=4,
+        augmentation=transforms,
+        dataloader_kwargs={'batch_size': 4},
+    )
 
     dl = DataLoader(ds)
+    for epoch in range(2):
+        for batch in dl:
+            for sr_img, lr_img in zip(batch['sr_img'], batch['lr_img']):
+                visualize_img_from_array(sr_img)
+                visualize_img_from_array(lr_img)
+                print(sr_img.shape, lr_img.shape)
+        ds.update()
 
-    print(ds.__dict__, dl.dataset.__dict__)
-
-    ds.update()
-
-    print(ds.__dict__, dl.dataset.__dict__)
 
 
 
