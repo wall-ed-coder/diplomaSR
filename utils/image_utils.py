@@ -4,6 +4,7 @@ from IPython.display import display
 import torch
 import numpy as np
 from typing import Union
+from utils.common_utils import in_ipynb
 
 
 def open_image_RGB(path_to_open: str):
@@ -20,10 +21,9 @@ def visualize_img(img_path: str, notebook=True):
         img.show()
 
 
-def visualize_img_from_array(img_array: Union[np.array, torch.Tensor],  notebook=True, transpose=True):
-    # todo сделать чтобы notebook автоматически определялся
+def visualize_img_from_array(img_array: Union[np.array, torch.Tensor], transpose=True):
     if isinstance(img_array, torch.Tensor):
-        img_array = img_array.cpu().numpy()
+        img_array = img_array.detach().cpu().numpy()
 
     if transpose:
         img_array = img_array.transpose((1, 2, 0))
@@ -33,7 +33,7 @@ def visualize_img_from_array(img_array: Union[np.array, torch.Tensor],  notebook
 
     img = Image.fromarray(img_array)
 
-    if notebook:
+    if in_ipynb():
         display(img)
     else:
         img.show()

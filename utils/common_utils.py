@@ -4,7 +4,7 @@ import numpy as np
 
 
 def get_numpy_from_torch(t: Tensor) -> np.array:
-    return t.cpu().numpy()
+    return t.detach().cpu().numpy()
 
 
 def in_ipynb():

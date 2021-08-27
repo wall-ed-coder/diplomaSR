@@ -3,13 +3,13 @@ from typing import Optional, Tuple, Dict, List, Union
 
 from torch.cuda.amp import autocast, GradScaler
 
-from training.dataset import SRDatasets
-from training.discriminator import Discriminator
-from training.generator import Generator
-from training.abc_loss import ABCLoss
+from data.dataset import SRDatasets
+from metrics.metrics import Metrics
+from models.discriminator import Discriminator
+from models.generator import Generator
+from losses.losses import ABCLoss
 from datetime import datetime
 from torch.optim import Optimizer
-import logging
 import torch
 from torch import device as TorchDevice
 from torch import Tensor
@@ -30,8 +30,8 @@ else:
 
 TEXT_MSG_PER_EVERY_N_STEP = '''
 {mode} {epoch} epoch; {step} batch; 
-    {mode} generative loss: {gen_loss:.5f}, 
-    {mode} discriminator loss: {disc_loss}
+    {mode} generative losses: {gen_loss:.5f}, 
+    {mode} discriminator losses: {disc_loss}
 '''
 
 
@@ -48,11 +48,10 @@ class Trainer:
     config: dict
 
     datasets: SRDatasets
+    metrics: List[Metrics]
 
     log_dir: str
     log_filename: str = f'logs_{str(datetime.now())}.txt'
-
-    metrics: Union[list, tuple] = () # todo
 
     device: TorchDevice = torch.device("cuda:0")
 
@@ -60,6 +59,7 @@ class Trainer:
     discriminator_optimizer: Optional[Optimizer] = None
     discriminator_loss: Optional[ABCLoss] = None
 
+    train_discriminator_every_n_step: int = 10
     verbose_every_n_steps: int = 150
     getting_average_by_last_n: int = None
     current_epoch: int = 0
@@ -74,6 +74,7 @@ class Trainer:
         self.check_all_asserts()
 
     def check_all_asserts(self):
+        # todo add assert that network return needed size as scale_coef
         self.assert_everything_fine_with_memory()
         self.assert_datasets_is_right()
         self.assert_networks_fine()
@@ -143,6 +144,9 @@ class Trainer:
 
         return generator_loss_on_step, discriminator_loss_on_step
 
+    def calculate_metrics(self, pred_batch, real_batch):
+        pass
+
     def _train_step(self) -> Tuple[float, float]:
         self.generator.train()
         if self.discriminator:
@@ -164,7 +168,7 @@ class Trainer:
             self.gen_scaler.step(self.generator_optimizer)
             losses['gen_loss'].append(gen_loss.item())
 
-            if self.discriminator:
+            if self.discriminator and step % self.train_discriminator_every_n_step == 0:
                 assert disc_loss is not None, 'disc_loss is none'
                 self.disc_scaler.scale(disc_loss).backward()
                 self.disc_scaler.step(self.discriminator_optimizer)
