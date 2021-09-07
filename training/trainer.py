@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict, List, Union
+from typing import Optional, Tuple, Dict, List
 
 from torch.cuda.amp import autocast, GradScaler
 
@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 
 from utils import visualize_img_from_array
 from utils import in_ipynb
+from collections import defaultdict
 
 if in_ipynb():
     from tqdm import tqdm_notebook as tqdm
@@ -48,7 +49,7 @@ class Trainer:
     config: dict
 
     datasets: SRDatasets
-    metrics: List[Metrics]
+    metrics: Metrics
 
     log_dir: str
     log_filename: str = f'logs_{str(datetime.now())}.txt'
@@ -74,8 +75,7 @@ class Trainer:
         self.check_all_asserts()
 
     def check_all_asserts(self):
-        # todo add assert that network return needed size as scale_coef
-        self.assert_everything_fine_with_memory()
+        self.assert_everything_fine_with_memory_and_sizes()
         self.assert_datasets_is_right()
         self.assert_networks_fine()
 
@@ -87,9 +87,13 @@ class Trainer:
             assert self.discriminator_optimizer is not None
             assert self.discriminator_loss is not None
 
-    def assert_everything_fine_with_memory(self):
-        batch = next(self.datasets.train_loader)['lr_img']
-        self.generator(batch)
+    @torch.no_grad()
+    def assert_everything_fine_with_memory_and_sizes(self):
+        batch = self.datasets.train_loader.dataset[0]
+        lr_img = batch['lr_img']
+        sr_img = batch['sr_img']
+        pred_sr_img = self.generator(lr_img)
+        assert pred_sr_img.shape == sr_img.shape
 
     def assert_datasets_is_right(self):
         assert self.datasets.train_loader is not None
@@ -126,9 +130,9 @@ class Trainer:
         test_gen_loss, test_disc_loss = self._val_step(test_loader=True)
         print(f'final losses: test_gen_loss={test_gen_loss:.5f}, test_disc_loss={test_disc_loss}')
 
-    def _step(self, data, calculate_metrics: bool = False) -> Tuple[Tensor, Optional[Tensor]]:
-        # todo add calculate_metrics, need to think how it will works
+    def _step(self, data, calculate_metrics: bool = False) -> Tuple[Tensor, Optional[Tensor], Optional[Dict]]:
         lr_img, sr_img = data['lr_img'].to(self.device), data['sr_img'].to(self.device)
+        metrics = None
         discriminator_loss_on_step = None
         with autocast():
             pred_sr_img = self.generator(lr_img)
@@ -137,15 +141,14 @@ class Trainer:
             if self.discriminator:
                 pred_disc_val, disc_val = self.discriminator(pred_sr_img, sr_img)
                 discriminator_loss_on_step = self.discriminator_loss.get_loss(pred_disc_val, disc_val)
+            if calculate_metrics:
+                metrics = self.metrics.calculate_metrics(pred_imgs=pred_sr_img, real_imgs=sr_img)
 
         if np.random.randint(0, self.show_predicted_img_every_n_batch+1, 1)[0] == self.show_predicted_img_every_n_batch:
             self.visualize(pred_sr_img, lr_img, sr_img, generator_loss_on_step.item(),
                            discriminator_loss_on_step.item() if discriminator_loss_on_step is not None else None)
 
-        return generator_loss_on_step, discriminator_loss_on_step
-
-    def calculate_metrics(self, pred_batch, real_batch):
-        pass
+        return generator_loss_on_step, discriminator_loss_on_step, metrics
 
     def _train_step(self) -> Tuple[float, float]:
         self.generator.train()
@@ -162,7 +165,7 @@ class Trainer:
             if self.discriminator:
                 self.discriminator_optimizer.zero_grad()
 
-            gen_loss, disc_loss = self._step(data)
+            gen_loss, disc_loss, _ = self._step(data)
 
             self.gen_scaler.scale(gen_loss).backward()
             self.gen_scaler.step(self.generator_optimizer)
@@ -193,6 +196,7 @@ class Trainer:
 
         self.datasets.update()
 
+    @torch.no_grad()
     def _val_step(self, test_loader: bool = False) -> Tuple[float, float]:
         if test_loader:
             loader = self.datasets.test_loader
@@ -210,22 +214,34 @@ class Trainer:
             'disc_loss': []
         }
 
-        with torch.no_grad():
-            for step, data in enumerate(tqdm(loader)):
-                gen_loss, disc_loss = self._step(data, calculate_metrics=True)
-                losses['gen_loss'].append(gen_loss.item())
+        metrics = defaultdict(list)
 
-                if self.discriminator:
-                    assert disc_loss is not None, 'disc_loss is none'
-                    losses['disc_loss'].append(disc_loss.item())
+        for step, data in enumerate(tqdm(loader)):
+            gen_loss, disc_loss, metrics_per_step = self._step(data, calculate_metrics=True)
 
-                if step % self.verbose_every_n_steps == 0:
-                    msg = TEXT_MSG_PER_EVERY_N_STEP.format(
-                        epoch=self.current_epoch, step=step, mode=mode,
-                        gen_loss=np.average(losses['gen_loss'][-self.getting_average_by_last_n:]),
-                        disc_loss=np.average(losses['disc_loss'][-self.getting_average_by_last_n:])
-                    )
-                    self._save_info_about_training(msg)
+            losses['gen_loss'].append(gen_loss.item())
+
+            for metric, value in metrics_per_step.items():
+                metrics[metric].append(value)
+
+            if self.discriminator:
+                assert disc_loss is not None, 'disc_loss is none'
+                losses['disc_loss'].append(disc_loss.item())
+
+            if step % self.verbose_every_n_steps == 0:
+                msg = TEXT_MSG_PER_EVERY_N_STEP.format(
+                    epoch=self.current_epoch, step=step, mode=mode,
+                    gen_loss=np.average(losses['gen_loss'][-self.getting_average_by_last_n:]),
+                    disc_loss=np.average(losses['disc_loss'][-self.getting_average_by_last_n:])
+                )
+                self._save_info_about_training(msg)
+
+        final_metrics_msg = ''
+
+        for metric, values in metrics.items():
+            final_metrics_msg += f'{metric} = {np.mean(values)}\n'
+
+        self._save_info_about_training(final_metrics_msg)
 
         return np.average(losses['gen_loss']), np.average(losses['disc_loss'])
 
