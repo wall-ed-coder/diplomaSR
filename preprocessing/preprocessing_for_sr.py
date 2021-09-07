@@ -1,17 +1,6 @@
 import albumentations as A
 
-from preprocessing.preprocessing import SHIFT_LIMIT, SIZES_FOR_CROPS
-
-
-RANDOM_RESIZE_AUGMENTATIONS = {
-    (height, width): A.Compose([
-        A.PadIfNeeded(min_height=height, min_width=width, always_apply=True),
-        A.OneOf([
-            A.RandomCrop(height=height, width=width, p=0.8),
-            A.RandomResizedCrop(height=height, width=width, p=0.2),
-        ], p=1.)
-    ]) for height, width in SIZES_FOR_CROPS
-}
+from preprocessing.preprocessing import SHIFT_LIMIT
 
 
 def rotate_and_shift_transforms() -> A.Compose:

@@ -6,7 +6,8 @@ import os
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
-from preprocessing.preprocessing import SIZES_FOR_CROPS, ApplyAlbumentation
+from preprocessing.preprocessing import SIZES_FOR_CROPS
+from preprocessing.apply_albumentations import ApplyAlbumentation
 from utils.image_utils import open_image_RGB
 
 
@@ -94,12 +95,11 @@ class SRDatasets:
 
 
 if __name__ == '__main__':
-    from preprocessing import ApplyAlbumentation
     from utils import visualize_img_from_array
     transforms = ApplyAlbumentation()
 
     ds = CommonSRDataset(
-        csv_path='/test_df.csv',
+        csv_path='/Users/nikita/Desktop/diploma_sr2/test_df.csv',
         root_to_data='/Users/nikita/Downloads/',
         scale_coef=4,
         augmentation=transforms,
