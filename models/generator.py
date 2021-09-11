@@ -1,4 +1,5 @@
-from torch import nn, Tensor
+from torch import Tensor
+import torch.nn as nn
 
 
 class Generator(nn.Module):

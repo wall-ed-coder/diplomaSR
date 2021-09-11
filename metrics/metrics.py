@@ -1,5 +1,7 @@
 import torch
 from piq import FSIMLoss, PieAPP, DISTS, GMSDLoss, MultiScaleGMSDLoss, MDSILoss, HaarPSILoss
+import torch.nn as nn
+from typing import Dict
 
 
 metrics_parameters = {
@@ -26,16 +28,14 @@ class Metrics:
     def __init__(self, metrics=DEFAULT_METRICS):
         self.metrics = metrics
 
-    def add_metrics(self, metrics):
+    def add_metrics(self, metrics: Dict[str, nn.Module]):
         self.metrics.update(metrics)
 
     @torch.no_grad()
     def calculate_metrics(self, pred_imgs, real_imgs):
         rez = {}
-
         for params, metric in self.metrics.items():
             rez[params] = metric(x=pred_imgs, y=real_imgs).item()
-
         return rez
 
 

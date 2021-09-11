@@ -7,7 +7,7 @@ from data.dataset import SRDatasets
 from metrics.metrics import Metrics
 from models.discriminator import Discriminator
 from models.generator import Generator
-from losses.losses import ABCLoss
+from losses.losses import BasicGenLoss
 from datetime import datetime
 from torch.optim import Optimizer
 import torch
@@ -38,13 +38,14 @@ TEXT_MSG_PER_EVERY_N_STEP = '''
 
 # todo add logging
 # todo add saving aug transforms in pipeline
-
+# todo change weights of gen_losses in training  like while its only start
+#  we need to generate only similar pixels and then we can add some other things
 
 @dataclass
 class Trainer:
     generator: Generator
     generator_optimizer: Optimizer
-    generator_loss: ABCLoss
+    generator_loss: BasicGenLoss
 
     config: dict
 
