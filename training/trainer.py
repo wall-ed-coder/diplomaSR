@@ -7,7 +7,7 @@ from data.dataset import SRDatasets
 from metrics.metrics import Metrics
 from models.discriminator import Discriminator
 from models.generator import Generator
-from losses.losses import BasicGenLoss
+from losses.losses import CustomLoss
 from datetime import datetime
 from torch.optim import Optimizer
 import torch
@@ -45,7 +45,7 @@ TEXT_MSG_PER_EVERY_N_STEP = '''
 class Trainer:
     generator: Generator
     generator_optimizer: Optimizer
-    generator_loss: BasicGenLoss
+    generator_loss: CustomLoss
 
     config: dict
 
@@ -59,7 +59,7 @@ class Trainer:
 
     discriminator: Optional[Discriminator] = None
     discriminator_optimizer: Optional[Optimizer] = None
-    discriminator_loss: Optional[ABCLoss] = None
+    discriminator_loss: Optional[CustomLoss] = None
 
     train_discriminator_every_n_step: int = 10
     verbose_every_n_steps: int = 150
@@ -137,11 +137,11 @@ class Trainer:
         discriminator_loss_on_step = None
         with autocast():
             pred_sr_img = self.generator(lr_img)
-            generator_loss_on_step = self.generator_loss.get_loss(pred_sr_img, sr_img)
+            generator_loss_on_step = self.generator_loss(pred_sr_img, sr_img)
 
             if self.discriminator:
                 pred_disc_val, disc_val = self.discriminator(pred_sr_img, sr_img)
-                discriminator_loss_on_step = self.discriminator_loss.get_loss(pred_disc_val, disc_val)
+                discriminator_loss_on_step = self.discriminator_loss(pred_disc_val, disc_val)
             if calculate_metrics:
                 metrics = self.metrics.calculate_metrics(pred_imgs=pred_sr_img, real_imgs=sr_img)
 

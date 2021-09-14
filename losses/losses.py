@@ -1,4 +1,3 @@
-from abc import ABC
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -25,15 +24,20 @@ gen_losses_parameters = {
 }
 
 
-class BasicGenLoss(ABC):
+class CustomLoss:
+    def __call__(self, *args, **kwargs):
+        return self.get_loss(*args, **kwargs)
+
+
+class BasicGenLoss(CustomLoss):
 
     def __init__(
             self, gen_losses: list = gen_losses_parameters['losses'],
             gen_weights: list = gen_losses_parameters['weights'],
-            disc_loss: nn.Module = None,
+            disc_loss: nn.Module = torch.nn.BCEWithLogitsLoss(),
             disc_loss_weight=2.
     ):
-        # todo add disc_loss
+        # here was used realistic discriminator loss for discriminator
         assert len(gen_losses) == len(gen_weights)
         self.gen_losses = gen_losses
         self.disc_loss = disc_loss
@@ -55,12 +59,19 @@ class BasicGenLoss(ABC):
 
     def get_disc_loss(self, disc_pred_on_fake, disc_pred_on_real) -> Tensor:
         if disc_pred_on_fake is not None and disc_pred_on_real is not None and self.disc_loss is not None:
-            return self.disc_loss(disc_pred_on_fake, disc_pred_on_real)
+            return self.disc_loss(disc_pred_on_fake - disc_pred_on_real, torch.full_like(disc_pred_on_fake, 1.))
         else:
             return torch.tensor(0.)
 
 
-# todo add discriminator_loss
+class RealisticDiscLoss(CustomLoss):
+
+    def __init__(self):
+        self.disc_loss: nn.Module = torch.nn.BCEWithLogitsLoss()
+
+    def get_loss(self, disc_pred_on_fake, disc_pred_on_real) -> Tensor:
+        return self.disc_loss(disc_pred_on_real - disc_pred_on_fake, torch.full_like(disc_pred_on_fake, 1.))
+
 
 if __name__ == '__main__':
     loss = BasicGenLoss()
