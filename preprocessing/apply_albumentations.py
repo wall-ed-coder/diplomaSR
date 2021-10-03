@@ -43,7 +43,7 @@ class ApplyAlbumentation:
     def apply_lr_transform(
             self,
             image: np.array,
-            resize_shape: Optional[Tuple[int, int]],
+            resize_shape: Tuple[int, int],
     ) -> np.array:
         image = resize_for_LR(image, resize_shape)
         if self.noise_and_blur:

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Tuple, Dict, List, Union
 
 from torch.cuda.amp import autocast, GradScaler
 
@@ -22,6 +22,8 @@ import matplotlib.pyplot as plt
 from utils import visualize_img_from_array
 from utils import in_ipynb
 from collections import defaultdict
+from torch.optim.lr_scheduler import \
+    LambdaLR, StepLR, MultiStepLR, ExponentialLR, CosineAnnealingLR, CyclicLR, CosineAnnealingWarmRestarts
 
 if in_ipynb():
     from tqdm import tqdm_notebook as tqdm
@@ -46,7 +48,6 @@ class Trainer:
     generator: Generator
     generator_optimizer: Optimizer
     generator_loss: CustomLoss
-
     config: dict
 
     datasets: SRDatasets
@@ -60,8 +61,22 @@ class Trainer:
     discriminator: Optional[Discriminator] = None
     discriminator_optimizer: Optional[Optimizer] = None
     discriminator_loss: Optional[CustomLoss] = None
+    discriminator_scheduler: Optional[
+        Union[
+            LambdaLR, StepLR, MultiStepLR, CosineAnnealingWarmRestarts,
+            ExponentialLR, CosineAnnealingLR, CyclicLR,
 
-    train_discriminator_every_n_step: int = 10
+        ]
+    ] = None
+
+    generator_scheduler: Optional[
+        Union[
+            LambdaLR, StepLR, MultiStepLR, CosineAnnealingWarmRestarts,
+            ExponentialLR, CosineAnnealingLR, CyclicLR,
+        ]
+    ] = None
+
+    train_discriminator_every_n_step: int = 5
     verbose_every_n_steps: int = 150
     getting_average_by_last_n: int = None
     current_epoch: int = 0
@@ -247,6 +262,12 @@ class Trainer:
         return np.average(losses['gen_loss']), np.average(losses['disc_loss'])
 
     def on_epoch_end(self, losses: Dict[str, List[float]]):
+        if self.generator_scheduler:
+            self.generator_scheduler.step()
+
+        if self.discriminator_scheduler:
+            self.discriminator_scheduler.step()
+
         self.save_state()
         self.save_losses(losses)
 
@@ -275,7 +296,7 @@ class Trainer:
 
     def save_state(self, path: Optional[str] = None):
         if path is None:
-            path = os.path.join(self.log_dir, f"{self.current_epoch+1}epoch_checkpoint.pt")
+            path = os.path.join(self.log_dir, f"{self.current_epoch+1}_epoch_checkpoint.pt")
 
         torch.save({
             'current_epoch': self.current_epoch + 1,
@@ -283,8 +304,8 @@ class Trainer:
             'discriminator': self.discriminator.state_dict() if self.discriminator else None,
             'generator_optimizer': self.generator_optimizer.state_dict(),
             'discriminator_optimizer': self.discriminator_optimizer.state_dict() if self.discriminator else None,
-            # 'model_scheduler': self.model_scheduler.state_dict(),
-            # 'fc_scheduler': self.fc_scheduler.state_dict(),
+            'discriminator_scheduler': self.discriminator_scheduler.state_dict() if self.discriminator_scheduler else None,
+            'generator_scheduler': self.generator_scheduler.state_dict() if self.generator_scheduler else None,
             'gen_scaler': self.gen_scaler.state_dict(),
             'disc_scaler': self.disc_scaler.state_dict() if self.discriminator else None,
             'config': self.config,
@@ -292,7 +313,7 @@ class Trainer:
 
     def load_state(self, path: Optional[str] = None):
         if path is None:
-            path = os.path.join(self.log_dir, f"{self.current_epoch+1}epoch_checkpoint.pt")
+            path = os.path.join(self.log_dir, f"{self.current_epoch+1}_epoch_checkpoint.pt")
         checkpoint = torch.load(path, map_location=self.device)
 
         self.generator.load_state_dict(checkpoint['generator'])
@@ -303,6 +324,12 @@ class Trainer:
             self.discriminator.load_state_dict(checkpoint['discriminator'])
             self.disc_scaler.load_state_dict(checkpoint['disc_scaler'])
             self.discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer'])
+
+        if checkpoint['discriminator_scheduler']:
+            self.discriminator_scheduler.load_state_dict(checkpoint['discriminator_scheduler'])
+
+        if checkpoint['generator_scheduler']:
+            self.generator_scheduler.load_state_dict(checkpoint['generator_scheduler'])
 
         self.current_epoch = checkpoint['current_epoch']
         self.config = checkpoint['config']

@@ -2,7 +2,7 @@ import numpy as np
 
 import albumentations as A
 
-DOWN_SCALE_COEF = [4, 8, 16]
+DOWN_SCALE_COEF = [2, 4, 8, 16]
 MAX_IMG_HEIGHT = 1024
 MAX_IMG_WIDTH = 1024
 MIN_IMG_HEIGHT = 224
@@ -18,17 +18,7 @@ ASPECT_RATION = [
 ]
 
 SIZES_FOR_CROPS = sorted(
-    filter(
-        lambda x: x[0] % 8 == 0 and x[1] % 8 == 0 and x[0] >= MIN_IMG_HEIGHT and x[1] >= MIN_IMG_WIDTH, [
-            (
-                (
-                    MAX_IMG_HEIGHT // i // 1,
-                    int(MAX_IMG_WIDTH // i * (aspect_ration_width / aspect_ration_height)) // 1
-                )
-            ) for i in range(1, 6)
-            for aspect_ration_height, aspect_ration_width in ASPECT_RATION
-        ]
-    )
+    [(256, 256), (512, 384), (512, 512), (1024, 768), (1024, 1024)]
 )
 
 
@@ -70,3 +60,7 @@ def custom_resize_fn(image, resize_shape=None):
 #  будто изображение реежется и конкатится постоянно
 #  блюр слишком сильный для маленьких картинок
 
+
+if __name__ == '__main__':
+    # [(256, 256), (512, 288), (512, 384), (512, 512), (1024, 576), (1024, 768), (1024, 1024)]
+    print(SIZES_FOR_CROPS)
