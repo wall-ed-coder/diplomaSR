@@ -42,12 +42,13 @@ class CommonSRDataset(Dataset):
         return SIZES_FOR_CROPS[np.random.choice(len(SIZES_FOR_CROPS))]
 
     def get_dataloader(self) -> DataLoader:
-        return DataLoader(self, **self.dataloader_kwargs, shuffle=(self.mode == DataSetMode.TRAIN))
+        if 'shuffle' not in self.dataloader_kwargs:
+            self.dataloader_kwargs.update(shuffle=(self.mode == DataSetMode.TRAIN))
+        return DataLoader(self, **self.dataloader_kwargs)
 
     def __getitem__(self, index: int):
         img_name = self.csv_data.iloc[index]['imgName']
         img_path = os.path.join(self.root_to_data, img_name)
-
         original_image = open_image_RGB(img_path)
         preprocessed_SR_img = self.augmentation.apply_sr_transform(
             image=original_image, resize_shape=self.current_resize_shape

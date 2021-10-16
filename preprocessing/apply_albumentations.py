@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
+import albumentations as A
 
 from preprocessing.preprocessing import custom_resize_fn, preprocess_input
 from preprocessing.preprocessing_for_lr import noise_and_blur_transforms, scale_transforms, resize_for_LR
@@ -24,6 +25,7 @@ class ApplyAlbumentation:
     usual_changing_color = None
     noise_and_blur = None
     scale = None
+    flip_fn=None
 
     def __post_init__(self):
         self.rotate_and_shift = rotate_and_shift_transforms()
@@ -39,6 +41,7 @@ class ApplyAlbumentation:
 
         self.noise_and_blur = noise_and_blur_transforms()
         self.scale = scale_transforms()
+        self.flip_fn = A.Compose([A.HorizontalFlip(p=0.3),A.VerticalFlip(p=0.1),])
 
     def apply_lr_transform(
             self,
@@ -64,6 +67,7 @@ class ApplyAlbumentation:
         if self.rotate_and_shift and rand_num > self.prob_do_nothing:
             image = self.rotate_and_shift(image=image)['image']
 
+        image = self.apply_flip(image)
         image = custom_resize_fn(image, resize_shape)
         if rand_num > self.prob_do_nothing:
             if self.changing_structure:
@@ -77,3 +81,6 @@ class ApplyAlbumentation:
 
     def apply_transpose_and_standardization(self, image: np.array,) -> np.array:
         return preprocess_input(image)
+
+    def apply_flip(self, image: np.array) -> np.array:
+        return self.flip_fn(image=image)['image']

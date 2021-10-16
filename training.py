@@ -12,7 +12,7 @@ import os
 from utils import get_param_from_config, lock_deterministic, object_from_dict
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(os.path.join(os.getcwd(), os.path.expanduser(__file__))))
-config_dir = os.path.normpath(os.path.join(SCRIPT_DIR, "../configs"))
+config_dir = os.path.normpath(os.path.join(SCRIPT_DIR, "configs"))
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', action="store", dest="config",
@@ -72,19 +72,22 @@ def main(train_config: dict):
     discriminator_optimizer = None
     discriminator_loss = None
     discriminator_scheduler = None
-    if 'discriminator' in train_config:
-        discriminator_model = object_from_dict(train_config.discriminator)
+    if 'discriminator_model' in train_config:
+        discriminator_model = object_from_dict(train_config.discriminator_model)
         discriminator = Discriminator(model=discriminator_model).to(DEVICE)
-        discriminator_optimizer = object_from_dict(train_config.discriminator_optimizer)
+        discriminator_optimizer = object_from_dict(train_config.discriminator_optimizer, params=discriminator.parameters())
         discriminator_loss = object_from_dict(train_config.discriminator_loss).to(DEVICE)
         if 'discriminator_scheduler' in train_config:
             discriminator_scheduler = object_from_dict(
                 train_config.discriminator_scheduler, optimizer=discriminator_optimizer
             )
-    generator_model = object_from_dict(train_config.generator)
+    generator_model = object_from_dict(train_config.generator_model, n_super_resolution=scale_coef)
     generator_loss = object_from_dict(train_config.generator_loss).to(DEVICE)
-    generator_optimizer = object_from_dict(train_config.generator_optimizer)
     generator = Generator(model=generator_model).to(DEVICE)
+    generator_optimizer = object_from_dict(
+        train_config.generator_optimizer,
+        params=generator.parameters()
+    )
     generator_scheduler = None
     if 'generator_scheduler' in train_config:
         generator_scheduler = object_from_dict(train_config.generator_scheduler, optimizer=generator_optimizer)

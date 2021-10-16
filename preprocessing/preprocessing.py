@@ -1,12 +1,13 @@
 import numpy as np
 
 import albumentations as A
+import torch
 
 DOWN_SCALE_COEF = [2, 4, 8, 16]
-MAX_IMG_HEIGHT = 1024
-MAX_IMG_WIDTH = 1024
-MIN_IMG_HEIGHT = 224
-MIN_IMG_WIDTH = 224
+MAX_IMG_HEIGHT = 512
+MAX_IMG_WIDTH = 512
+MIN_IMG_HEIGHT = 32
+MIN_IMG_WIDTH = 32
 MAX_IMG_SIZE_IN_PIXELS: int = MAX_IMG_HEIGHT * MAX_IMG_WIDTH
 SHIFT_LIMIT = 35
 ASPECT_RATION = [
@@ -18,7 +19,11 @@ ASPECT_RATION = [
 ]
 
 SIZES_FOR_CROPS = sorted(
-    [(256, 256), (512, 384), (512, 512), (1024, 768), (1024, 1024)]
+    [
+        # (16, 16), (32, 16), (32, 32), (64, 32), (64, 64),
+        (128, 64), (128, 128), (256, 128), (256, 64), (256, 256)
+        # (256, 256), (512, 384), (512, 512), (1024, 768), (1024, 1024)
+    ]
 )
 
 
@@ -44,7 +49,7 @@ RESIZE_SCALE_DOWN_LR = {
 
 def preprocess_input(image: np.array):
     image = (image / 255.).astype('float32').transpose((2, 0, 1))
-    return image
+    return torch.from_numpy(image)
 
 
 def custom_resize_fn(image, resize_shape=None):

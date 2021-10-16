@@ -3,7 +3,7 @@ import functools
 import torch
 import torch.nn as nn
 from math import log2
-
+import torch.nn.functional as F
 
 class Generator(nn.Module):
 
@@ -12,7 +12,8 @@ class Generator(nn.Module):
         self.model = model
 
     def forward(self, batch) -> Tensor:
-        return self.model(batch)
+        return torch.clamp(self.model(batch), min=0., max=1.)
+        # return self.model(batch)
 
 
 def make_layer(block, n_layers):
@@ -20,6 +21,19 @@ def make_layer(block, n_layers):
     for _ in range(n_layers):
         layers.append(block())
     return nn.Sequential(*layers)
+
+
+class Generator_Test(nn.Module):
+    def __init__(self, n_super_resolution=4):
+        super(Generator_Test, self).__init__()
+        assert n_super_resolution in [2, 4, 8, 16]
+        self.linear = nn.Linear(1, 1)
+        self.layers = nn.Sequential(*[
+            nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),) for _ in range(int(log2(n_super_resolution)))
+        ])
+
+    def forward(self, x):
+        return self.layers(x)
 
 
 class ResidualDenseBlock_5C(nn.Module):
@@ -73,16 +87,16 @@ class RRDBNet(nn.Module):
 
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         #### upsampling
-
         layers = []
         for _ in range(int(log2(n_super_resolution))):
             layers.append(
                 nn.Sequential(
                     nn.Upsample(scale_factor=2, mode='nearest'),
                     nn.Conv2d(hidden_dim, hidden_dim, 3, 1, 1, bias=True),
-                    self.lrelu,
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
                 )
             )
+        self.n_super_resolution = n_super_resolution
         self.upconv = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -92,12 +106,14 @@ class RRDBNet(nn.Module):
 
         fea = self.upconv(fea)
         out = self.conv_last(self.lrelu(self.HRconv(fea)))
-
         return out
 
 
 if  __name__ == '__main__':
     # import torchsummary
-    t = torch.rand((1, 3, 256, 256))
-    network = Generator(model=RRDBNet(3,3,64,4,8,64))
+    network = Generator(model=Generator_Test(4))
+    t = torch.rand((10, 3, 256, 256))
     print(network(t).shape)
+
+    # network = Generator(model=RRDBNet(3,3,64,4,8,64))
+    # print(network(t).shape)

@@ -30,21 +30,21 @@ if in_ipynb():
 else:
     from tqdm import tqdm
 
-
 TEXT_MSG_PER_EVERY_N_STEP = '''
-{mode} {epoch} epoch; {step} batch; 
-    {mode} generative losses: {gen_loss:.5f}, 
-    {mode} discriminator losses: {disc_loss}
+mode={mode}, {epoch} epoch, {step} batch; 
+    generative losses: {gen_loss:.5f}, 
+    discriminator losses: {disc_loss}\n
 '''
 
-
+# todo add info about error in logs
 # todo add logging
 # todo add saving aug transforms in pipeline
-# todo change weights of gen_losses in training  like while its only start
+# todo change weights of gen_losses in train  like while its only start
 #  we need to generate only similar pixels and then we can add some other things
 
+
 @dataclass
-class Trainer:
+class CommonTrainer:
     generator: Generator
     generator_optimizer: Optimizer
     generator_loss: CustomLoss
@@ -85,7 +85,9 @@ class Trainer:
     def __post_init__(self):
         self.gen_scaler = GradScaler()
         self.disc_scaler = GradScaler()
-        if self.getting_average_by_last_n is None:
+        torch.autograd.set_detect_anomaly(True)
+        # todo change function of fabrics that create a param with None like a string
+        if self.getting_average_by_last_n is None or self.getting_average_by_last_n == 'None':
             self.getting_average_by_last_n = self.verbose_every_n_steps // 3
 
         self.check_all_asserts()
@@ -94,6 +96,8 @@ class Trainer:
         self.assert_everything_fine_with_memory_and_sizes()
         self.assert_datasets_is_right()
         self.assert_networks_fine()
+        self.assert_folders_created()
+        print("Every asserts of trainer is fine!")
 
     def assert_networks_fine(self):
         assert self.generator is not None
@@ -103,13 +107,22 @@ class Trainer:
             assert self.discriminator_optimizer is not None
             assert self.discriminator_loss is not None
 
+    def assert_folders_created(self):
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+
     @torch.no_grad()
     def assert_everything_fine_with_memory_and_sizes(self):
         batch = self.datasets.train_loader.dataset[0]
         lr_img = batch['lr_img']
+        lr_img = lr_img.reshape(1, *lr_img.shape)
         sr_img = batch['sr_img']
+        sr_img = sr_img.reshape(1, *sr_img.shape)
         pred_sr_img = self.generator(lr_img)
-        assert pred_sr_img.shape == sr_img.shape
+        assert pred_sr_img.shape == sr_img.shape, f'{pred_sr_img.shape} and {sr_img.shape}'
+        if self.discriminator is not None:
+            pred_disc, real_disc = self.discriminator(pred_sr_img, sr_img)
+            assert pred_disc.shape == real_disc.shape and (pred_disc <= 1.).all() and (real_disc <= 1.).all()
 
     def assert_datasets_is_right(self):
         assert self.datasets.train_loader is not None
@@ -152,17 +165,28 @@ class Trainer:
         discriminator_loss_on_step = None
         with autocast():
             pred_sr_img = self.generator(lr_img)
-            generator_loss_on_step = self.generator_loss(pred_sr_img, sr_img)
-
+            cloned_pred_sr_img = pred_sr_img.clone().detach()
             if self.discriminator:
-                pred_disc_val, disc_val = self.discriminator(pred_sr_img, sr_img)
+                pred_disc_val, disc_val = self.discriminator(cloned_pred_sr_img, sr_img)
                 discriminator_loss_on_step = self.discriminator_loss(pred_disc_val, disc_val)
-            if calculate_metrics:
-                metrics = self.metrics.calculate_metrics(pred_imgs=pred_sr_img, real_imgs=sr_img)
 
-        if np.random.randint(0, self.show_predicted_img_every_n_batch+1, 1)[0] == self.show_predicted_img_every_n_batch:
-            self.visualize(pred_sr_img, lr_img, sr_img, generator_loss_on_step.item(),
-                           discriminator_loss_on_step.item() if discriminator_loss_on_step is not None else None)
+            generator_loss_on_step = self.generator_loss(
+                pred_sr_img, sr_img, pred_disc_val.clone().detach(), disc_val.clone().detach()
+            )
+
+            cloned_sr_img = sr_img.clone().detach()
+            cloned_lr_img = lr_img.clone().detach()
+            cloned_gen_loss = generator_loss_on_step.clone().detach()
+            cloned_disc_loss = discriminator_loss_on_step.clone().detach() \
+                if discriminator_loss_on_step is not None else None
+
+            if calculate_metrics:
+                metrics = self.metrics.calculate_metrics(pred_imgs=cloned_pred_sr_img, real_imgs=cloned_sr_img)
+
+        if np.random.randint(0, self.show_predicted_img_every_n_batch + 1, 1)[0] \
+                == self.show_predicted_img_every_n_batch:
+            self.visualize(cloned_pred_sr_img, cloned_lr_img, cloned_sr_img, cloned_gen_loss.item(),
+                           cloned_disc_loss.item() if discriminator_loss_on_step is not None else None)
 
         return generator_loss_on_step, discriminator_loss_on_step, metrics
 
@@ -186,7 +210,7 @@ class Trainer:
             self.gen_scaler.scale(gen_loss).backward()
             self.gen_scaler.step(self.generator_optimizer)
             losses['gen_loss'].append(gen_loss.item())
-
+            # torch.autograd.set_detect_anomaly(True)
             if self.discriminator and step % self.train_discriminator_every_n_step == 0:
                 assert disc_loss is not None, 'disc_loss is none'
                 self.disc_scaler.scale(disc_loss).backward()
@@ -195,7 +219,7 @@ class Trainer:
 
             if step % self.verbose_every_n_steps == 0:
                 msg = TEXT_MSG_PER_EVERY_N_STEP.format(
-                    epoch=self.current_epoch, step=step, mode='training',
+                    epoch=self.current_epoch, step=step, mode='train',
                     gen_loss=np.average(losses['gen_loss'][-self.getting_average_by_last_n:]),
                     disc_loss=np.average(losses['disc_loss'][-self.getting_average_by_last_n:])
                 )
@@ -275,15 +299,16 @@ class Trainer:
         df = pd.DataFrame.from_dict(losses)
         sns.set(style='darkgrid')
         plt.figure()
-        sns.lineplot(x='epoch', y='train_gen_loss', data=df).savefig(os.path.join(self.log_dir, "train_gen_loss.png"))
+        sns.lineplot(x='epoch', y='train_gen_loss', data=df).figure.savefig(os.path.join(self.log_dir, "train_gen_loss.png"))
         if not df['train_disc_loss'].isna().any():
             plt.figure()
-            sns.lineplot(x='epoch', y='train_disc_loss', data=df).savefig(os.path.join(self.log_dir, "train_disc_loss.png"))
+            sns.lineplot(x='epoch', y='train_disc_loss', data=df).figure.savefig(
+                os.path.join(self.log_dir, "train_disc_loss.png"))
         plt.figure()
-        sns.lineplot(x='epoch', y='val_gen_loss', data=df).savefig(os.path.join(self.log_dir, "val_gen_loss.png"))
+        sns.lineplot(x='epoch', y='val_gen_loss', data=df).figure.savefig(os.path.join(self.log_dir, "val_gen_loss.png"))
         if not df['val_disc_loss'].isna().any():
             plt.figure()
-            sns.lineplot(x='epoch', y='val_disc_loss', data=df).savefig(os.path.join(self.log_dir, "val_disc_loss.png"))
+            sns.lineplot(x='epoch', y='val_disc_loss', data=df).figure.savefig(os.path.join(self.log_dir, "val_disc_loss.png"))
         plt.figure()
         df.to_csv(os.path.join(self.log_dir, 'losses_data.csv'))
 
@@ -296,7 +321,7 @@ class Trainer:
 
     def save_state(self, path: Optional[str] = None):
         if path is None:
-            path = os.path.join(self.log_dir, f"{self.current_epoch+1}_epoch_checkpoint.pt")
+            path = os.path.join(self.log_dir, f"{self.current_epoch + 1}_epoch_checkpoint.pt")
 
         torch.save({
             'current_epoch': self.current_epoch + 1,
@@ -313,7 +338,7 @@ class Trainer:
 
     def load_state(self, path: Optional[str] = None):
         if path is None:
-            path = os.path.join(self.log_dir, f"{self.current_epoch+1}_epoch_checkpoint.pt")
+            path = os.path.join(self.log_dir, f"{self.current_epoch + 1}_epoch_checkpoint.pt")
         checkpoint = torch.load(path, map_location=self.device)
 
         self.generator.load_state_dict(checkpoint['generator'])
@@ -351,7 +376,3 @@ class Trainer:
 
         print(f'generator_loss_on_step={generator_loss_on_step}')
         print(f'discriminator_loss_on_step={discriminator_loss_on_step}')
-
-
-
-

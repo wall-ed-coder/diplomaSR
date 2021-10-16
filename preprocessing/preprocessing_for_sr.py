@@ -54,8 +54,6 @@ def specific_changing_color_transforms() -> A.Compose:
 
 def changing_structure_transforms() -> A.Compose:
     transforms = [
-        A.HorizontalFlip(p=0.3),
-        A.VerticalFlip(p=0.1),
         A.OneOf([
             A.CoarseDropout(p=1.),
             A.GridDropout(
