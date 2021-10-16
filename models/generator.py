@@ -3,7 +3,7 @@ import functools
 import torch
 import torch.nn as nn
 from math import log2
-import torch.nn.functional as F
+
 
 class Generator(nn.Module):
 
@@ -13,7 +13,6 @@ class Generator(nn.Module):
 
     def forward(self, batch) -> Tensor:
         return torch.clamp(self.model(batch), min=0., max=1.)
-        # return self.model(batch)
 
 
 def make_layer(block, n_layers):

@@ -18,12 +18,14 @@ import os
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
+import logging
 
 from utils import visualize_img_from_array
 from utils import in_ipynb
 from collections import defaultdict
 from torch.optim.lr_scheduler import \
     LambdaLR, StepLR, MultiStepLR, ExponentialLR, CosineAnnealingLR, CyclicLR, CosineAnnealingWarmRestarts
+from training import ROOT_DIR
 
 if in_ipynb():
     from tqdm import tqdm_notebook as tqdm
@@ -31,13 +33,12 @@ else:
     from tqdm import tqdm
 
 TEXT_MSG_PER_EVERY_N_STEP = '''
-mode={mode}, {epoch} epoch, {step} batch; 
+mode: {mode}, {epoch} epoch, {step} batch; 
     generative losses: {gen_loss:.5f}, 
     discriminator losses: {disc_loss}\n
 '''
 
 # todo add info about error in logs
-# todo add logging
 # todo add saving aug transforms in pipeline
 # todo change weights of gen_losses in train  like while its only start
 #  we need to generate only similar pixels and then we can add some other things
@@ -53,8 +54,9 @@ class CommonTrainer:
     datasets: SRDatasets
     metrics: Metrics
 
-    log_dir: str
+    log_dir: str = f'logs_dir_about_train_{str(datetime.now())}'
     log_filename: str = f'logs_{str(datetime.now())}.txt'
+    full_log_path: str = None
 
     device: TorchDevice = torch.device("cuda:0")
 
@@ -76,28 +78,40 @@ class CommonTrainer:
         ]
     ] = None
 
+    logger = logging.getLogger(__name__)
     train_discriminator_every_n_step: int = 5
     verbose_every_n_steps: int = 150
-    getting_average_by_last_n: int = None
+    getting_average_by_last_n: int = 10
     current_epoch: int = 0
     show_predicted_img_every_n_batch: int = 250
 
     def __post_init__(self):
         self.gen_scaler = GradScaler()
         self.disc_scaler = GradScaler()
-        torch.autograd.set_detect_anomaly(True)
+        self.full_log_path = os.path.join(ROOT_DIR, self.log_dir, self.log_filename)
         # todo change function of fabrics that create a param with None like a string
-        if self.getting_average_by_last_n is None or self.getting_average_by_last_n == 'None':
-            self.getting_average_by_last_n = self.verbose_every_n_steps // 3
+        if self.log_dir is None:
+            self.log_dir = f'logs_dir_about_train_{str(datetime.now())}'
 
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+
+        self.config_logger()
         self.check_all_asserts()
+
+    def config_logger(self):
+        f_handler = logging.FileHandler(self.full_log_path)
+        f_format = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
+        f_handler.setLevel(logging.INFO)
+        f_handler.setFormatter(f_format)
+        self.logger.addHandler(f_handler)
+        self.logger.setLevel(logging.INFO)
 
     def check_all_asserts(self):
         self.assert_everything_fine_with_memory_and_sizes()
         self.assert_datasets_is_right()
         self.assert_networks_fine()
-        self.assert_folders_created()
-        print("Every asserts of trainer is fine!")
+        self.logger.info("Every asserts of trainer are fine!")
 
     def assert_networks_fine(self):
         assert self.generator is not None
@@ -107,11 +121,6 @@ class CommonTrainer:
             assert self.discriminator_optimizer is not None
             assert self.discriminator_loss is not None
 
-    def assert_folders_created(self):
-        if not os.path.exists(self.log_dir):
-            os.makedirs(self.log_dir)
-
-    @torch.no_grad()
     def assert_everything_fine_with_memory_and_sizes(self):
         batch = self.datasets.train_loader.dataset[0]
         lr_img = batch['lr_img']
@@ -157,7 +166,7 @@ class CommonTrainer:
             self.on_epoch_end(losses)
 
         test_gen_loss, test_disc_loss = self._val_step(test_loader=True)
-        print(f'final losses: test_gen_loss={test_gen_loss:.5f}, test_disc_loss={test_disc_loss}')
+        self.logger.info(f'final losses: test_gen_loss={test_gen_loss:.5f}, test_disc_loss={test_disc_loss}')
 
     def _step(self, data, calculate_metrics: bool = False) -> Tuple[Tensor, Optional[Tensor], Optional[Dict]]:
         lr_img, sr_img = data['lr_img'].to(self.device), data['sr_img'].to(self.device)
@@ -183,8 +192,9 @@ class CommonTrainer:
             if calculate_metrics:
                 metrics = self.metrics.calculate_metrics(pred_imgs=cloned_pred_sr_img, real_imgs=cloned_sr_img)
 
-        if np.random.randint(0, self.show_predicted_img_every_n_batch + 1, 1)[0] \
-                == self.show_predicted_img_every_n_batch:
+        if self.show_predicted_img_every_n_batch and \
+                np.random.randint(0, self.show_predicted_img_every_n_batch + 1, 1)[0]\
+                    == self.show_predicted_img_every_n_batch:
             self.visualize(cloned_pred_sr_img, cloned_lr_img, cloned_sr_img, cloned_gen_loss.item(),
                            cloned_disc_loss.item() if discriminator_loss_on_step is not None else None)
 
@@ -217,13 +227,13 @@ class CommonTrainer:
                 self.disc_scaler.step(self.discriminator_optimizer)
                 losses['disc_loss'].append(disc_loss.item())
 
-            if step % self.verbose_every_n_steps == 0:
+            if self.verbose_every_n_steps and step % self.verbose_every_n_steps == 0:
                 msg = TEXT_MSG_PER_EVERY_N_STEP.format(
                     epoch=self.current_epoch, step=step, mode='train',
                     gen_loss=np.average(losses['gen_loss'][-self.getting_average_by_last_n:]),
                     disc_loss=np.average(losses['disc_loss'][-self.getting_average_by_last_n:])
                 )
-                self._save_info_about_training(msg)
+                self.logger.info(msg)
 
             self._on_train_step_end()
 
@@ -268,20 +278,20 @@ class CommonTrainer:
                 assert disc_loss is not None, 'disc_loss is none'
                 losses['disc_loss'].append(disc_loss.item())
 
-            if step % self.verbose_every_n_steps == 0:
+            if self.verbose_every_n_steps and step % self.verbose_every_n_steps == 0:
                 msg = TEXT_MSG_PER_EVERY_N_STEP.format(
                     epoch=self.current_epoch, step=step, mode=mode,
                     gen_loss=np.average(losses['gen_loss'][-self.getting_average_by_last_n:]),
                     disc_loss=np.average(losses['disc_loss'][-self.getting_average_by_last_n:])
                 )
-                self._save_info_about_training(msg)
+                self.logger.info(msg)
 
         final_metrics_msg = ''
 
         for metric, values in metrics.items():
             final_metrics_msg += f'{metric} = {np.mean(values)}\n'
 
-        self._save_info_about_training(final_metrics_msg)
+        self.logger.info(final_metrics_msg)
 
         return np.average(losses['gen_loss']), np.average(losses['disc_loss'])
 
@@ -312,12 +322,12 @@ class CommonTrainer:
         plt.figure()
         df.to_csv(os.path.join(self.log_dir, 'losses_data.csv'))
 
-    def _save_info_about_training(self, text):
-        if not os.path.exists(self.log_dir):
-            os.makedirs(self.log_dir)
-        full_path = os.path.join(self.log_dir, self.log_filename)
-        with open(full_path, "a") as file:
-            file.write(text + '\n')
+    def save_info_about_training(self, text):
+        if self.logger:
+            self.logger.info(text)
+        else:
+            with open(self.full_log_path, "a") as file:
+                file.write(text + '\n')
 
     def save_state(self, path: Optional[str] = None):
         if path is None:
@@ -364,10 +374,10 @@ class CommonTrainer:
             pred_imgs: Tensor, real_imgs_LR: Tensor, real_imgs_SR: Tensor,
             generator_loss_on_step, discriminator_loss_on_step
     ):
-        print_imgs = min(2, pred_imgs.shape[0])
+        print_imgs = max(pred_imgs.shape[0], 4)
 
         for i in range(print_imgs):
-            print('predicted')
+            print('\npredicted')
             visualize_img_from_array(pred_imgs[i])
             print('real_img_LR')
             visualize_img_from_array(real_imgs_LR[i])

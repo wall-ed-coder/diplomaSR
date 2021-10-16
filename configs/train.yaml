@@ -4,7 +4,7 @@ train_path: 'test_df.csv'
 valid_path: 'test_df.csv'
 test_path: 'test_df.csv'
 
-root: '/Users/nikita/Downloads/'
+root_to_data: '/Users/nikita/Downloads/'
 updates_per_epoch: 100
 scale_coef: 2
 n_epochs: 10
@@ -18,8 +18,6 @@ valid_dataloader:
   num_workers: 0
 
 device: 'cpu'
-
-root_to_save_model: 'saved_models/'
 
 dataset:
   type: data.dataset.CommonSRDataset
@@ -63,6 +61,5 @@ trainer:
   type: train.trainer.CommonTrainer
   train_discriminator_every_n_step: 5
   verbose_every_n_steps: 4
-  getting_average_by_last_n: None
   current_epoch: 0
-  show_predicted_img_every_n_batch: 4
+  show_predicted_img_every_n_batch: 100
