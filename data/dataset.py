@@ -88,13 +88,15 @@ class SRDatasets:
         self.test_loader = self.test_loader or self.test_dataset.get_dataloader()
 
     def update(self):
+        self.train_loader.dataset.update()
+        self.val_loader.dataset.update()
+        self.test_loader.dataset.update()
         self.train_dataset.update()
         self.val_dataset.update()
         self.test_dataset.update()
 
 
 if __name__ == '__main__':
-    from utils import visualize_img_from_array
     transforms = AugmentationApplier()
 
     ds = CommonSRDataset(
@@ -102,17 +104,15 @@ if __name__ == '__main__':
         root_to_data='/Users/nikita/Downloads/',
         scale_coef=4,
         augmentation=transforms,
-        dataloader_kwargs={'batch_size': 4, 'num_workers': 4},
+        dataloader_kwargs={'batch_size': 2},
     )
 
-    dl = DataLoader(ds)
+    dl = ds.get_dataloader()
     for epoch in range(3):
         for batch in dl:
-            for sr_img, lr_img in zip(batch['sr_img'], batch['lr_img']):
-                visualize_img_from_array(sr_img)
-                visualize_img_from_array(lr_img)
-                # print(sr_img.shape, lr_img.shape)
-        ds.update()
+            print(batch['sr_img'].shape, batch['lr_img'].shape)
+            dl.dataset.update()
+        print('finish epoch')
 
 
 

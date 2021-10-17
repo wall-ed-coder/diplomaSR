@@ -155,7 +155,6 @@ class Trainer:
             losses['val_gen_loss'].append(val_gen_loss)
             losses['val_disc_loss'].append(val_disc_loss)
             losses['epoch'].append(epoch)
-
             self.on_epoch_end(losses)
 
         test_gen_loss, test_disc_loss = self._test()
@@ -163,6 +162,8 @@ class Trainer:
 
     def _step(self, data, calculate_metrics: bool = False) -> Tuple[Tensor, Optional[Tensor], Optional[Dict]]:
         lr_img, sr_img = data['lr_img'].to(self.device), data['sr_img'].to(self.device)
+        print(lr_img.shape)
+        print(sr_img.shape)
         metrics = None
         discriminator_loss_on_step = None
         with autocast():
@@ -201,7 +202,7 @@ class Trainer:
             'disc_loss': []
         }
         disc_losses = []
-        # todo update не помогает тк итератор уже есть вроде но перепроверить это
+
         for step, data in enumerate(tqdm(self.datasets.train_loader)):
             self.generator_optimizer.zero_grad()
             if self.discriminator:
@@ -239,6 +240,9 @@ class Trainer:
 
         self.datasets.update()
 
+    def _on_val_step_end(self):
+        self.datasets.update()
+
     @torch.no_grad()
     def _val(self, test_loader: bool = False) -> Tuple[float, float]:
         if test_loader:
@@ -274,6 +278,8 @@ class Trainer:
                     disc_loss=np.average(losses['disc_loss'][-self.getting_average_by_last_n:])
                 )
                 self.logger.info(msg)
+
+            self._on_val_step_end()
 
         final_metrics_msg = ''
         for metric, values in metrics.items():
