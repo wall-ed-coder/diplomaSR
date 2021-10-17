@@ -1,0 +1,65 @@
+seed: 666
+
+train_path: 'test_df.csv'
+valid_path: 'test_df.csv'
+test_path: 'test_df.csv'
+
+root_to_data: '/Users/nikita/Downloads/'
+updates_per_epoch: 100
+scale_coef: 2
+n_epochs: 10
+
+train_dataloader:
+  batch_size: 1
+  num_workers: 0
+
+valid_dataloader:
+  batch_size: 1
+  num_workers: 0
+
+device: 'cpu'
+
+dataset:
+  type: data.dataset.CommonSRDataset
+#todo change it to abc discriminator
+discriminator_model:
+  type: models.discriminator_vgg_128.Discriminator_VGG_128
+  in_nc: 3
+  nf: 8
+#discriminator_model:
+#  type: models.discriminator.DiscriminatorTest
+discriminator_optimizer:
+  type: torch.optim.Adam
+  lr: 0.001
+discriminator_loss:
+  type: losses.realistic_loss.RealisticLoss
+discriminator_scheduler:
+  type: torch.optim.lr_scheduler.StepLR
+  step_size: 1
+  gamma: 0.5
+#todo change it to abc generator
+generator_model:
+  type: models.generator_rrdb.RRDBNet
+  in_channels: 3
+  out_channels: 3
+  hidden_dim: 5
+  n_blocks: 3
+  hidden_dim_in_blocks: 5
+#generator_model:
+#  type: models.generator.Generator_Test
+generator_loss:
+  type: losses.gen_losses.FullyGenLoss
+generator_optimizer:
+  type: torch.optim.Adam
+  lr: 0.001
+generator_scheduler:
+  type: torch.optim.lr_scheduler.StepLR
+  step_size: 1
+  gamma: 0.5
+
+trainer:
+  type: train.trainer.Trainer
+  train_discriminator_every_n_step: 5
+  verbose_every_n_steps: 4
+  current_epoch: 0
+  show_predicted_img_every_n_batch: 1

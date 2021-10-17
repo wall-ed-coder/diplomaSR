@@ -1,14 +1,6 @@
 import albumentations as A
 
-from preprocessing.preprocessing import SIZES_FOR_CROPS, DOWN_SCALE_COEF
-
-# todo добавить разную интерполяцию
-RESIZE_SCALE_DOWN_LR = {
-    (height//scale_coef, width//scale_coef): A.Compose([
-        A.Resize(height=height//scale_coef, width=width//scale_coef, always_apply=True)
-    ]) for height, width in SIZES_FOR_CROPS
-    for scale_coef in DOWN_SCALE_COEF
-}
+from preprocessing.preprocessing import RESIZE_SCALE_DOWN_LR
 
 
 def noise_and_blur_transforms() -> A.Compose:

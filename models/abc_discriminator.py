@@ -11,5 +11,3 @@ class Discriminator(nn.Module):
 
     def forward(self, pred_batch_sr_img, real_batch_sr_img) -> Tuple[Tensor, Tensor]:
         return self.model(pred_batch_sr_img), self.model(real_batch_sr_img)
-
-

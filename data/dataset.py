@@ -6,7 +6,8 @@ import os
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
-from preprocessing.preprocessing import SIZES_FOR_CROPS, ApplyAlbumentation
+from preprocessing.preprocessing import SIZES_FOR_CROPS
+from preprocessing.apply_albumentations import AugmentationApplier
 from utils.image_utils import open_image_RGB
 
 
@@ -20,7 +21,7 @@ class DataSetMode(Enum):
 class CommonSRDataset(Dataset):
     csv_path: str
     root_to_data: str
-    augmentation: ApplyAlbumentation
+    augmentation: AugmentationApplier
     scale_coef: int
     dataloader_kwargs: dict
     mode: DataSetMode = DataSetMode.VALIDATION
@@ -41,24 +42,23 @@ class CommonSRDataset(Dataset):
         return SIZES_FOR_CROPS[np.random.choice(len(SIZES_FOR_CROPS))]
 
     def get_dataloader(self) -> DataLoader:
-        return DataLoader(self, **self.dataloader_kwargs, shuffle=(self.mode == DataSetMode.TRAIN))
+        if 'shuffle' not in self.dataloader_kwargs:
+            self.dataloader_kwargs.update(shuffle=(self.mode == DataSetMode.TRAIN))
+        return DataLoader(self, **self.dataloader_kwargs)
 
     def __getitem__(self, index: int):
         img_name = self.csv_data.iloc[index]['imgName']
         img_path = os.path.join(self.root_to_data, img_name)
-
         original_image = open_image_RGB(img_path)
-        preprocessed_SR_img = self.augmentation.apply_sr_transform(
-            image=original_image, resize_shape=self.current_resize_shape
-        )
 
-        preprocessed_LR_img = self.augmentation.apply_lr_transform(
-            image=preprocessed_SR_img, resize_shape=self.current_resize_shape_lr
+        preprocessed_SR_img, preprocessed_LR_img = self.augmentation.get_lr_and_sr_images_after_transforms(
+            image=original_image, sr_resize_shape=self.current_resize_shape,
+            lr_resize_shape=self.current_resize_shape_lr
         )
 
         return {
-            "lr_img": self.augmentation.apply_transpose_and_standardization(preprocessed_LR_img),
-            "sr_img": self.augmentation.apply_transpose_and_standardization(preprocessed_SR_img),
+            "lr_img": preprocessed_LR_img,
+            "sr_img": preprocessed_SR_img
         }
 
     def __len__(self):
@@ -88,32 +88,31 @@ class SRDatasets:
         self.test_loader = self.test_loader or self.test_dataset.get_dataloader()
 
     def update(self):
+        self.train_loader.dataset.update()
+        self.val_loader.dataset.update()
+        self.test_loader.dataset.update()
         self.train_dataset.update()
         self.val_dataset.update()
         self.test_dataset.update()
 
 
 if __name__ == '__main__':
-    from preprocessing import ApplyAlbumentation
-    from utils import visualize_img_from_array
-    transforms = ApplyAlbumentation()
+    transforms = AugmentationApplier()
 
     ds = CommonSRDataset(
-        csv_path='/test_df.csv',
+        csv_path='/Users/nikita/Desktop/diploma_sr2/test_df.csv',
         root_to_data='/Users/nikita/Downloads/',
         scale_coef=4,
         augmentation=transforms,
-        dataloader_kwargs={'batch_size': 4, 'num_workers': 4},
+        dataloader_kwargs={'batch_size': 2},
     )
 
-    dl = DataLoader(ds)
+    dl = ds.get_dataloader()
     for epoch in range(3):
         for batch in dl:
-            for sr_img, lr_img in zip(batch['sr_img'], batch['lr_img']):
-                visualize_img_from_array(sr_img)
-                visualize_img_from_array(lr_img)
-                # print(sr_img.shape, lr_img.shape)
-        ds.update()
+            print(batch['sr_img'].shape, batch['lr_img'].shape)
+            dl.dataset.update()
+        print('finish epoch')
 
 
 
