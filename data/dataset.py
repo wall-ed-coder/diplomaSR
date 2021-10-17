@@ -7,7 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
 from preprocessing.preprocessing import SIZES_FOR_CROPS
-from preprocessing.apply_albumentations import ApplyAlbumentation
+from preprocessing.apply_albumentations import AugmentationApplier
 from utils.image_utils import open_image_RGB
 
 
@@ -21,7 +21,7 @@ class DataSetMode(Enum):
 class CommonSRDataset(Dataset):
     csv_path: str
     root_to_data: str
-    augmentation: ApplyAlbumentation
+    augmentation: AugmentationApplier
     scale_coef: int
     dataloader_kwargs: dict
     mode: DataSetMode = DataSetMode.VALIDATION
@@ -50,17 +50,15 @@ class CommonSRDataset(Dataset):
         img_name = self.csv_data.iloc[index]['imgName']
         img_path = os.path.join(self.root_to_data, img_name)
         original_image = open_image_RGB(img_path)
-        preprocessed_SR_img = self.augmentation.apply_sr_transform(
-            image=original_image, resize_shape=self.current_resize_shape
-        )
 
-        preprocessed_LR_img = self.augmentation.apply_lr_transform(
-            image=preprocessed_SR_img, resize_shape=self.current_resize_shape_lr
+        preprocessed_SR_img, preprocessed_LR_img = self.augmentation.get_lr_and_sr_images_after_transforms(
+            image=original_image, sr_resize_shape=self.current_resize_shape,
+            lr_resize_shape=self.current_resize_shape_lr
         )
 
         return {
-            "lr_img": self.augmentation.apply_transpose_and_standardization(preprocessed_LR_img),
-            "sr_img": self.augmentation.apply_transpose_and_standardization(preprocessed_SR_img),
+            "lr_img": preprocessed_LR_img,
+            "sr_img": preprocessed_SR_img
         }
 
     def __len__(self):
@@ -97,7 +95,7 @@ class SRDatasets:
 
 if __name__ == '__main__':
     from utils import visualize_img_from_array
-    transforms = ApplyAlbumentation()
+    transforms = AugmentationApplier()
 
     ds = CommonSRDataset(
         csv_path='/Users/nikita/Desktop/diploma_sr2/test_df.csv',

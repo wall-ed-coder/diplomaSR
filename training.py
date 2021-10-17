@@ -3,10 +3,10 @@ import torch
 
 from datetime import datetime
 from data.dataset import DataSetMode, SRDatasets
-from metrics.metrics import Metrics
-from models.discriminator import Discriminator
-from models.generator import Generator
-from preprocessing.apply_albumentations import ApplyAlbumentation
+from metrics.metrics import DefaultMetrics
+from models.abc_discriminator import Discriminator
+from models.abc_generator import Generator
+from preprocessing.apply_albumentations import AugmentationApplier
 import os
 from utils import get_param_from_config, lock_deterministic, object_from_dict
 
@@ -36,8 +36,8 @@ def main(train_config: dict):
 
     scale_coef = train_config.scale_coef
 
-    train_transforms = ApplyAlbumentation()
-    valid_transforms = ApplyAlbumentation(prob_do_nothing=1.)
+    train_transforms = AugmentationApplier()
+    valid_transforms = AugmentationApplier(prob_do_nothing=1.)
 
     train_dataloader_kwargs = train_config.train_dataloader
     valid_dataloader_kwargs = train_config.valid_dataloader
@@ -79,7 +79,7 @@ def main(train_config: dict):
                 train_config.discriminator_scheduler, optimizer=discriminator_optimizer
             )
     generator_model = object_from_dict(train_config.generator_model, n_super_resolution=scale_coef)
-    generator_loss = object_from_dict(train_config.generator_loss).to(DEVICE)
+    generator_loss = object_from_dict(train_config.generator_loss, disc_loss=discriminator_loss).to(DEVICE)
     generator = Generator(model=generator_model).to(DEVICE)
     generator_optimizer = object_from_dict(
         train_config.generator_optimizer,
@@ -89,7 +89,7 @@ def main(train_config: dict):
     if 'generator_scheduler' in train_config:
         generator_scheduler = object_from_dict(train_config.generator_scheduler, optimizer=generator_optimizer)
 
-    metrics = Metrics()
+    metrics = DefaultMetrics()
 
     trainer = object_from_dict(
         train_config.trainer,

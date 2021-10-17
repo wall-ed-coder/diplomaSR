@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 
 import albumentations as A
@@ -6,25 +7,24 @@ import torch
 DOWN_SCALE_COEF = [2, 4, 8, 16]
 MAX_IMG_HEIGHT = 512
 MAX_IMG_WIDTH = 512
-MIN_IMG_HEIGHT = 32
-MIN_IMG_WIDTH = 32
+MIN_IMG_HEIGHT = 64
+MIN_IMG_WIDTH = 64
 MAX_IMG_SIZE_IN_PIXELS: int = MAX_IMG_HEIGHT * MAX_IMG_WIDTH
 SHIFT_LIMIT = 35
 ASPECT_RATION = [
-    (16, 9),
-    (5, 4),
-    (3, 2),
+    (4, 1),
+    (2, 1),
     (1, 1),
-    (4, 3),
 ]
 
-SIZES_FOR_CROPS = sorted(
+SIZES_FOR_CROPS = sorted(filter(
+    lambda t: MIN_IMG_HEIGHT <= t[0] <= MAX_IMG_HEIGHT and MIN_IMG_WIDTH <= t[1] <= MAX_IMG_WIDTH,
     [
-        # (16, 16), (32, 16), (32, 32), (64, 32), (64, 64),
-        (128, 64), (128, 128), (256, 128), (256, 64), (256, 256)
-        # (256, 256), (512, 384), (512, 512), (1024, 768), (1024, 1024)
+        (2**i//asp_ration[1], 2**i//asp_ration[0])
+        for i in range(6, 10)
+        for asp_ration in ASPECT_RATION
     ]
-)
+))
 
 
 RANDOM_RESIZE_AUGMENTATIONS = {
@@ -40,9 +40,12 @@ RANDOM_RESIZE_AUGMENTATIONS = {
 
 # todo добавить разную интерполяцию
 RESIZE_SCALE_DOWN_LR = {
-    (height//scale_coef, width//scale_coef): A.Compose([
-        A.Resize(height=height//scale_coef, width=width//scale_coef, always_apply=True)
-    ]) for height, width in SIZES_FOR_CROPS
+    (height//scale_coef, width//scale_coef): A.OneOf([
+        A.Resize(height=height//scale_coef, width=width//scale_coef, interpolation=cv2.INTER_LINEAR,),
+        A.Resize(height=height//scale_coef, width=width//scale_coef, interpolation=cv2.INTER_NEAREST,),
+        A.Resize(height=height//scale_coef, width=width//scale_coef, interpolation=cv2.INTER_CUBIC,),
+        A.Resize(height=height//scale_coef, width=width//scale_coef, interpolation=cv2.INTER_AREA,),
+    ], p=1.) for height, width in SIZES_FOR_CROPS
     for scale_coef in DOWN_SCALE_COEF
 }
 
@@ -67,5 +70,4 @@ def custom_resize_fn(image, resize_shape=None):
 
 
 if __name__ == '__main__':
-    # [(256, 256), (512, 288), (512, 384), (512, 512), (1024, 576), (1024, 768), (1024, 1024)]
     print(SIZES_FOR_CROPS)

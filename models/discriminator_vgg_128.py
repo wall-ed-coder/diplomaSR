@@ -1,17 +1,7 @@
-from typing import Tuple
 import torch
-from torch import nn, Tensor
+from torch import nn
 from math import log2
-from preprocessing.preprocessing import MAX_IMG_WIDTH, MAX_IMG_HEIGHT
-
-class Discriminator(nn.Module):
-
-    def __init__(self, model: nn.Module):
-        super(Discriminator, self).__init__()
-        self.model = model
-
-    def forward(self, pred_batch_sr_img, real_batch_sr_img) -> Tuple[Tensor, Tensor]:
-        return self.model(pred_batch_sr_img), self.model(real_batch_sr_img)
+from preprocessing.preprocessing import MAX_IMG_WIDTH, MAX_IMG_HEIGHT, MIN_IMG_WIDTH, MIN_IMG_HEIGHT
 
 
 class DiscriminatorUsualBlock(nn.Module):
@@ -49,7 +39,7 @@ class Discriminator_VGG_128(nn.Module):
         super(Discriminator_VGG_128, self).__init__()
         self.conv0_0 = nn.Conv2d(in_nc, nf, 3, 1, 1)
         self.usual_blocks1 = nn.Sequential(*[DiscriminatorUsualBlock(nf) for _ in range(3)])
-        max_num_blocks = int(log2(max(MAX_IMG_WIDTH, MAX_IMG_HEIGHT)))-int(log2(32))
+        max_num_blocks = int(log2(max(MAX_IMG_WIDTH, MAX_IMG_HEIGHT)))-int(log2(32))+1
         reduce2_usual_block = [
             DiscriminatorUsualBlockReducesX2(nf)
             for _ in range(max_num_blocks)
@@ -95,18 +85,9 @@ class Discriminator_VGG_128(nn.Module):
         return self.sigmoid(out)
 
 
-class Discriminator_Test(nn.Module):
-    def __init__(self):
-        super(Discriminator_Test, self).__init__()
-        self.linear = nn.Linear(1, 1)
-
-    def forward(self, x):
-        return torch.ones(x.shape[0]).resize(x.shape[0], 1)
-
-
 if __name__ == '__main__':
     from preprocessing.preprocessing import SIZES_FOR_CROPS
-
+    print(int(log2(max(MAX_IMG_WIDTH, MAX_IMG_HEIGHT)))-int(log2(32)))
     d = Discriminator_VGG_128(3, 8)
     for size in SIZES_FOR_CROPS:
         print(size)

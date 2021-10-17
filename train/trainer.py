@@ -4,10 +4,10 @@ from typing import Optional, Tuple, Dict, List, Union
 from torch.cuda.amp import autocast, GradScaler
 
 from data.dataset import SRDatasets
-from metrics.metrics import Metrics
-from models.discriminator import Discriminator
-from models.generator import Generator
-from losses.losses import CustomLoss
+from metrics.metrics import DefaultMetrics
+from models.abc_discriminator import Discriminator
+from models.abc_generator import Generator
+from losses.abc_loss import CustomLoss
 from datetime import datetime
 from torch.optim import Optimizer
 import torch
@@ -39,20 +39,20 @@ mode: {mode}, {epoch} epoch, {step} batch;
 '''
 
 # todo add info about error in logs
-# todo add saving aug transforms in pipeline
+# todo add saving transforms in pipeline
 # todo change weights of gen_losses in train  like while its only start
 #  we need to generate only similar pixels and then we can add some other things
-
+# todo add saving results from visualize
 
 @dataclass
-class CommonTrainer:
+class Trainer:
     generator: Generator
     generator_optimizer: Optimizer
     generator_loss: CustomLoss
     config: dict
 
     datasets: SRDatasets
-    metrics: Metrics
+    metrics: DefaultMetrics
 
     log_dir: str = f'logs_dir_about_train_{str(datetime.now())}'
     log_filename: str = f'logs_{str(datetime.now())}.txt'
@@ -64,24 +64,17 @@ class CommonTrainer:
     discriminator_optimizer: Optional[Optimizer] = None
     discriminator_loss: Optional[CustomLoss] = None
     discriminator_scheduler: Optional[
-        Union[
-            LambdaLR, StepLR, MultiStepLR, CosineAnnealingWarmRestarts,
-            ExponentialLR, CosineAnnealingLR, CyclicLR,
-
-        ]
+        Union[LambdaLR, StepLR, MultiStepLR, CosineAnnealingWarmRestarts, ExponentialLR, CosineAnnealingLR, CyclicLR]
     ] = None
 
     generator_scheduler: Optional[
-        Union[
-            LambdaLR, StepLR, MultiStepLR, CosineAnnealingWarmRestarts,
-            ExponentialLR, CosineAnnealingLR, CyclicLR,
-        ]
+        Union[LambdaLR, StepLR, MultiStepLR, CosineAnnealingWarmRestarts, ExponentialLR, CosineAnnealingLR, CyclicLR]
     ] = None
 
     logger = logging.getLogger(__name__)
     train_discriminator_every_n_step: int = 5
     verbose_every_n_steps: int = 150
-    getting_average_by_last_n: int = 10
+    getting_average_by_last_n: int = 20
     current_epoch: int = 0
     show_predicted_img_every_n_batch: int = 250
 
@@ -89,7 +82,7 @@ class CommonTrainer:
         self.gen_scaler = GradScaler()
         self.disc_scaler = GradScaler()
         self.full_log_path = os.path.join(ROOT_DIR, self.log_dir, self.log_filename)
-        # todo change function of fabrics that create a param with None like a string
+
         if self.log_dir is None:
             self.log_dir = f'logs_dir_about_train_{str(datetime.now())}'
 
@@ -153,9 +146,9 @@ class CommonTrainer:
         for epoch in tqdm(range(starting_epoch, epochs)):
             self.current_epoch = epoch
 
-            train_gen_loss, train_disc_loss = self._train_step()
+            train_gen_loss, train_disc_loss = self._train1epoch()
 
-            val_gen_loss, val_disc_loss = self._val_step()
+            val_gen_loss, val_disc_loss = self._val()
 
             losses['train_gen_loss'].append(train_gen_loss)
             losses['train_disc_loss'].append(train_disc_loss)
@@ -165,7 +158,7 @@ class CommonTrainer:
 
             self.on_epoch_end(losses)
 
-        test_gen_loss, test_disc_loss = self._val_step(test_loader=True)
+        test_gen_loss, test_disc_loss = self._test()
         self.logger.info(f'final losses: test_gen_loss={test_gen_loss:.5f}, test_disc_loss={test_disc_loss}')
 
     def _step(self, data, calculate_metrics: bool = False) -> Tuple[Tensor, Optional[Tensor], Optional[Dict]]:
@@ -193,39 +186,39 @@ class CommonTrainer:
                 metrics = self.metrics.calculate_metrics(pred_imgs=cloned_pred_sr_img, real_imgs=cloned_sr_img)
 
         if self.show_predicted_img_every_n_batch and \
-                np.random.randint(0, self.show_predicted_img_every_n_batch + 1, 1)[0]\
-                    == self.show_predicted_img_every_n_batch:
+                np.random.randint(1, self.show_predicted_img_every_n_batch + 2, 1)[0]\
+                    >= self.show_predicted_img_every_n_batch:
             self.visualize(cloned_pred_sr_img, cloned_lr_img, cloned_sr_img, cloned_gen_loss.item(),
                            cloned_disc_loss.item() if discriminator_loss_on_step is not None else None)
 
         return generator_loss_on_step, discriminator_loss_on_step, metrics
 
-    def _train_step(self) -> Tuple[float, float]:
-        self.generator.train()
-        if self.discriminator:
-            self.discriminator.train()
+    def _train1epoch(self) -> Tuple[float, float]:
+        self.change_training_mode(train=True)
 
         losses = {
             'gen_loss': [],
             'disc_loss': []
         }
-
+        disc_losses = []
+        # todo update не помогает тк итератор уже есть вроде но перепроверить это
         for step, data in enumerate(tqdm(self.datasets.train_loader)):
             self.generator_optimizer.zero_grad()
             if self.discriminator:
                 self.discriminator_optimizer.zero_grad()
 
             gen_loss, disc_loss, _ = self._step(data)
+            disc_losses.append(disc_loss)
 
             self.gen_scaler.scale(gen_loss).backward()
             self.gen_scaler.step(self.generator_optimizer)
             losses['gen_loss'].append(gen_loss.item())
-            # torch.autograd.set_detect_anomaly(True)
-            if self.discriminator and step % self.train_discriminator_every_n_step == 0:
+            if self.discriminator is not None and step % self.train_discriminator_every_n_step == 0:
                 assert disc_loss is not None, 'disc_loss is none'
-                self.disc_scaler.scale(disc_loss).backward()
+                self.disc_scaler.scale(torch.mean(torch.tensor(disc_losses, requires_grad=True))).backward()
                 self.disc_scaler.step(self.discriminator_optimizer)
                 losses['disc_loss'].append(disc_loss.item())
+                disc_losses = []
 
             if self.verbose_every_n_steps and step % self.verbose_every_n_steps == 0:
                 msg = TEXT_MSG_PER_EVERY_N_STEP.format(
@@ -247,7 +240,7 @@ class CommonTrainer:
         self.datasets.update()
 
     @torch.no_grad()
-    def _val_step(self, test_loader: bool = False) -> Tuple[float, float]:
+    def _val(self, test_loader: bool = False) -> Tuple[float, float]:
         if test_loader:
             loader = self.datasets.test_loader
             mode = 'testing'
@@ -255,15 +248,11 @@ class CommonTrainer:
             mode = 'validation'
             loader = self.datasets.val_loader
 
-        self.generator.eval()
-        if self.discriminator:
-            self.discriminator.eval()
-
+        self.change_training_mode(train=False)
         losses = {
             'gen_loss': [],
             'disc_loss': []
         }
-
         metrics = defaultdict(list)
 
         for step, data in enumerate(tqdm(loader)):
@@ -287,13 +276,24 @@ class CommonTrainer:
                 self.logger.info(msg)
 
         final_metrics_msg = ''
-
         for metric, values in metrics.items():
             final_metrics_msg += f'{metric} = {np.mean(values)}\n'
-
         self.logger.info(final_metrics_msg)
 
         return np.average(losses['gen_loss']), np.average(losses['disc_loss'])
+
+    def change_training_mode(self, train=True):
+        if train:
+            self.generator.train()
+            if self.discriminator:
+                self.discriminator.train()
+        else:
+            self.generator.eval()
+            if self.discriminator:
+                self.discriminator.eval()
+
+    def _test(self):
+        return self._val(test_loader=True)
 
     def on_epoch_end(self, losses: Dict[str, List[float]]):
         if self.generator_scheduler:
@@ -323,7 +323,7 @@ class CommonTrainer:
         df.to_csv(os.path.join(self.log_dir, 'losses_data.csv'))
 
     def save_info_about_training(self, text):
-        if self.logger:
+        if self.logger is not None:
             self.logger.info(text)
         else:
             with open(self.full_log_path, "a") as file:
@@ -374,7 +374,7 @@ class CommonTrainer:
             pred_imgs: Tensor, real_imgs_LR: Tensor, real_imgs_SR: Tensor,
             generator_loss_on_step, discriminator_loss_on_step
     ):
-        print_imgs = max(pred_imgs.shape[0], 4)
+        print_imgs = min(pred_imgs.shape[0], 4)
 
         for i in range(print_imgs):
             print('\npredicted')

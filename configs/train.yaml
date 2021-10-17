@@ -21,25 +21,25 @@ device: 'cpu'
 
 dataset:
   type: data.dataset.CommonSRDataset
-
+#todo change it to abc discriminator
 discriminator_model:
-  type: models.discriminator.Discriminator_VGG_128
+  type: models.discriminator_vgg_128.Discriminator_VGG_128
   in_nc: 3
   nf: 8
 #discriminator_model:
-#  type: models.discriminator.Discriminator_Test
+#  type: models.discriminator.DiscriminatorTest
 discriminator_optimizer:
   type: torch.optim.Adam
   lr: 0.001
 discriminator_loss:
-  type: losses.losses.RealisticDiscLoss
+  type: losses.realistic_loss.RealisticLoss
 discriminator_scheduler:
   type: torch.optim.lr_scheduler.StepLR
   step_size: 1
   gamma: 0.5
-
+#todo change it to abc generator
 generator_model:
-  type: models.generator.RRDBNet
+  type: models.generator_rrdb.RRDBNet
   in_channels: 3
   out_channels: 3
   hidden_dim: 5
@@ -48,7 +48,7 @@ generator_model:
 #generator_model:
 #  type: models.generator.Generator_Test
 generator_loss:
-  type: losses.losses.BasicGenLoss
+  type: losses.gen_losses.FullyGenLoss
 generator_optimizer:
   type: torch.optim.Adam
   lr: 0.001
@@ -58,8 +58,8 @@ generator_scheduler:
   gamma: 0.5
 
 trainer:
-  type: train.trainer.CommonTrainer
+  type: train.trainer.Trainer
   train_discriminator_every_n_step: 5
   verbose_every_n_steps: 4
   current_epoch: 0
-  show_predicted_img_every_n_batch: 100
+  show_predicted_img_every_n_batch: 1

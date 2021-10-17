@@ -23,8 +23,7 @@ for metric, params in metrics_parameters.items():
         DEFAULT_METRICS[type(created_metric).__name__+str(param)] = created_metric
 
 
-class Metrics:
-
+class DefaultMetrics:
     def __init__(self, metrics=DEFAULT_METRICS):
         self.metrics = metrics
 
@@ -40,7 +39,7 @@ class Metrics:
 
 
 if __name__ == '__main__':
-    metrics = Metrics()
+    metrics = DefaultMetrics()
 
     x = torch.rand((3, 3, 256, 256))
     y = torch.rand((3, 3, 256, 256))

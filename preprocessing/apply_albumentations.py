@@ -10,10 +10,8 @@ from preprocessing.preprocessing_for_sr import rotate_and_shift_transforms, chan
     specific_changing_color_transforms, usual_changing_color_transforms
 
 
-# todo изменить название на нормальное
-
 @dataclass
-class ApplyAlbumentation:
+class AugmentationApplier:
     add_specific_changing_color_transforms: bool = True
     add_usual_changing_color_transforms: bool = True
     add_changing_structure_transforms: bool = True
@@ -25,7 +23,7 @@ class ApplyAlbumentation:
     usual_changing_color = None
     noise_and_blur = None
     scale = None
-    flip_fn=None
+    flip_fn = None
 
     def __post_init__(self):
         self.rotate_and_shift = rotate_and_shift_transforms()
@@ -41,13 +39,9 @@ class ApplyAlbumentation:
 
         self.noise_and_blur = noise_and_blur_transforms()
         self.scale = scale_transforms()
-        self.flip_fn = A.Compose([A.HorizontalFlip(p=0.3),A.VerticalFlip(p=0.1),])
+        self.flip_fn = A.Compose([A.HorizontalFlip(p=0.3), A.VerticalFlip(p=0.1)])
 
-    def apply_lr_transform(
-            self,
-            image: np.array,
-            resize_shape: Tuple[int, int],
-    ) -> np.array:
+    def apply_lr_transform(self, image: np.array, resize_shape: Tuple[int, int]) -> np.array:
         image = resize_for_LR(image, resize_shape)
         if self.noise_and_blur:
             image = self.noise_and_blur(image=image)['image']
@@ -57,11 +51,7 @@ class ApplyAlbumentation:
 
         return image
 
-    def apply_sr_transform(
-            self,
-            image: np.array,
-            resize_shape: Optional[Tuple[int, int]] = None,
-    ) -> np.array:
+    def apply_sr_transform(self, image: np.array, resize_shape: Optional[Tuple[int, int]] = None,) -> np.array:
         rand_num = np.random.rand()
 
         if self.rotate_and_shift and rand_num > self.prob_do_nothing:
@@ -84,3 +74,12 @@ class ApplyAlbumentation:
 
     def apply_flip(self, image: np.array) -> np.array:
         return self.flip_fn(image=image)['image']
+
+    def get_lr_and_sr_images_after_transforms(
+            self, image: np.array, sr_resize_shape: Tuple[int, int], lr_resize_shape: Tuple[int, int]
+    ) -> Tuple[np.array, np.array]:
+        sr_image = self.apply_sr_transform(image=image, resize_shape=sr_resize_shape)
+
+        lr_image = self.apply_lr_transform(image=sr_image, resize_shape=lr_resize_shape)
+
+        return self.apply_transpose_and_standardization(sr_image), self.apply_transpose_and_standardization(lr_image)

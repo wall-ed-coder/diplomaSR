@@ -1,18 +1,8 @@
-from torch import Tensor
 import functools
-import torch
-import torch.nn as nn
 from math import log2
 
-
-class Generator(nn.Module):
-
-    def __init__(self, model: nn.Module):
-        super(Generator, self).__init__()
-        self.model = model
-
-    def forward(self, batch) -> Tensor:
-        return torch.clamp(self.model(batch), min=0., max=1.)
+import torch
+from torch import nn as nn
 
 
 def make_layer(block, n_layers):
@@ -20,19 +10,6 @@ def make_layer(block, n_layers):
     for _ in range(n_layers):
         layers.append(block())
     return nn.Sequential(*layers)
-
-
-class Generator_Test(nn.Module):
-    def __init__(self, n_super_resolution=4):
-        super(Generator_Test, self).__init__()
-        assert n_super_resolution in [2, 4, 8, 16]
-        self.linear = nn.Linear(1, 1)
-        self.layers = nn.Sequential(*[
-            nn.Sequential(nn.Upsample(scale_factor=2, mode='nearest'),) for _ in range(int(log2(n_super_resolution)))
-        ])
-
-    def forward(self, x):
-        return self.layers(x)
 
 
 class ResidualDenseBlock_5C(nn.Module):
@@ -106,13 +83,3 @@ class RRDBNet(nn.Module):
         fea = self.upconv(fea)
         out = self.conv_last(self.lrelu(self.HRconv(fea)))
         return out
-
-
-if  __name__ == '__main__':
-    # import torchsummary
-    network = Generator(model=Generator_Test(4))
-    t = torch.rand((10, 3, 256, 256))
-    print(network(t).shape)
-
-    # network = Generator(model=RRDBNet(3,3,64,4,8,64))
-    # print(network(t).shape)
