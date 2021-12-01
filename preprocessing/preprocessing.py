@@ -17,14 +17,14 @@ ASPECT_RATION = [
     (1, 1),
 ]
 
-SIZES_FOR_CROPS = sorted(filter(
+SIZES_FOR_CROPS = tuple(sorted(filter(
     lambda t: MIN_IMG_HEIGHT <= t[0] <= MAX_IMG_HEIGHT and MIN_IMG_WIDTH <= t[1] <= MAX_IMG_WIDTH,
     [
         (2**i//asp_ration[1], 2**i//asp_ration[0])
         for i in range(6, 10)
         for asp_ration in ASPECT_RATION
     ]
-))
+)))
 
 
 RANDOM_RESIZE_AUGMENTATIONS = {

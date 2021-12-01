@@ -162,8 +162,6 @@ class Trainer:
 
     def _step(self, data, calculate_metrics: bool = False) -> Tuple[Tensor, Optional[Tensor], Optional[Dict]]:
         lr_img, sr_img = data['lr_img'].to(self.device), data['sr_img'].to(self.device)
-        print(lr_img.shape)
-        print(sr_img.shape)
         metrics = None
         discriminator_loss_on_step = None
         with autocast():

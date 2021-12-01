@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import pandas as pd
 import os
 from torch.utils.data import Dataset, DataLoader
@@ -27,19 +27,21 @@ class CommonSRDataset(Dataset):
     mode: DataSetMode = DataSetMode.VALIDATION
     length: Optional[int] = None
 
+    sizes_for_crops: List[Tuple[int, int]] = SIZES_FOR_CROPS
     csv_data: pd.DataFrame = None
     current_resize_shape: Tuple[int, int] = None
     current_resize_shape_lr: Tuple[int, int] = None
 
     def __post_init__(self):
         self.csv_data = pd.read_csv(self.csv_path, sep=';')
+        self.sizes_for_crops = [(size[0], size[1]) for size in self.sizes_for_crops]
         self.current_resize_shape = self.get_random_resize_shape()
         self.current_resize_shape_lr = (
             self.current_resize_shape[0]//self.scale_coef, self.current_resize_shape[1]//self.scale_coef,
         )
 
     def get_random_resize_shape(self):
-        return SIZES_FOR_CROPS[np.random.choice(len(SIZES_FOR_CROPS))]
+        return self.sizes_for_crops[np.random.choice(len(self.sizes_for_crops))]
 
     def get_dataloader(self) -> DataLoader:
         if 'shuffle' not in self.dataloader_kwargs:
@@ -51,7 +53,7 @@ class CommonSRDataset(Dataset):
         img_path = os.path.join(self.root_to_data, img_name)
         original_image = open_image_RGB(img_path)
 
-        preprocessed_SR_img, preprocessed_LR_img = self.augmentation.get_lr_and_sr_images_after_transforms(
+        preprocessed_LR_img, preprocessed_SR_img = self.augmentation.get_lr_and_sr_images_after_transforms(
             image=original_image, sr_resize_shape=self.current_resize_shape,
             lr_resize_shape=self.current_resize_shape_lr
         )
@@ -105,6 +107,7 @@ if __name__ == '__main__':
         scale_coef=4,
         augmentation=transforms,
         dataloader_kwargs={'batch_size': 2},
+        sizes_for_crops=[(64, 64),]
     )
 
     dl = ds.get_dataloader()

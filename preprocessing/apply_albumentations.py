@@ -82,4 +82,4 @@ class AugmentationApplier:
 
         lr_image = self.apply_lr_transform(image=sr_image, resize_shape=lr_resize_shape)
 
-        return self.apply_transpose_and_standardization(sr_image), self.apply_transpose_and_standardization(lr_image)
+        return self.apply_transpose_and_standardization(lr_image), self.apply_transpose_and_standardization(sr_image)

@@ -21,13 +21,12 @@ device: 'cpu'
 
 dataset:
   type: data.dataset.CommonSRDataset
+  sizes_for_crops: [[64, 64], [128, 64], [128, 128], [256, 64], [256, 128], [256, 256],]
 #todo change it to abc discriminator
 discriminator_model:
   type: models.discriminator_vgg_128.Discriminator_VGG_128
   in_nc: 3
   nf: 8
-#discriminator_model:
-#  type: models.discriminator.DiscriminatorTest
 discriminator_optimizer:
   type: torch.optim.Adam
   lr: 0.001
@@ -45,8 +44,6 @@ generator_model:
   hidden_dim: 5
   n_blocks: 3
   hidden_dim_in_blocks: 5
-#generator_model:
-#  type: models.generator.Generator_Test
 generator_loss:
   type: losses.gen_losses.FullyGenLoss
 generator_optimizer:
