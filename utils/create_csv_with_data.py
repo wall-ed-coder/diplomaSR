@@ -12,7 +12,7 @@ args = parser.parse_args()
 
 
 def _getListOfFiles(dirName, patterns=('jpg', 'jpeg', 'png')):
-    # create a list of file and sub directories
+    # create a list of files and sub directories
     # names in the given directory
     listOfFile = os.listdir(dirName)
     allFiles = list()
@@ -41,5 +41,5 @@ def getListOfFiles(dirName, patterns=('jpg', 'jpeg', 'png'), save_full_path=Fals
 
 
 list_of_imgs = getListOfFiles(dirName=args.load_img_dir, save_full_path=args.save_full_path)
-pd.DataFrame(list_of_imgs, columns=['imgName']).to_csv(args.save_csv_path)
+pd.DataFrame(list_of_imgs, columns=['imgName']).to_csv(args.save_csv_path, index=False)
 print(f'find {len(list_of_imgs)} files!')
