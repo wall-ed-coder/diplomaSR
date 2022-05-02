@@ -129,5 +129,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+weights/*
+
+*.DS_Store
 *.csv
 *.txt
