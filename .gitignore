@@ -130,6 +130,7 @@ dmypy.json
 .pyre/
 
 weights/*
+testsets/*
 
 *.DS_Store
 *.csv

@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import torch
 import os
+import logging
 
 
 IMG_EXTENSIONS = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.ppm', '.PPM', '.bmp', '.BMP', '.tif']
@@ -90,3 +91,21 @@ def tensor2uint(img):
         img = np.transpose(img, (1, 2, 0))
     return np.uint8((img*255.0).round())
 
+
+def logger_info(logger_name, log_path='default_logger.log'):
+    log = logging.getLogger(logger_name)
+    if log.hasHandlers():
+        print('LogHandlers exist!')
+    else:
+        print('LogHandlers setup!')
+        level = logging.INFO
+        formatter = logging.Formatter('%(asctime)s.%(msecs)03d : %(message)s', datefmt='%y-%m-%d %H:%M:%S')
+        fh = logging.FileHandler(log_path, mode='a')
+        fh.setFormatter(formatter)
+        log.setLevel(level)
+        log.addHandler(fh)
+        # print(len(log.handlers))
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(formatter)
+        log.addHandler(sh)

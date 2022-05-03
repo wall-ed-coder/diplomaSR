@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
+from typing import List
+import logging
 
 
 def initialize_weights(net_l, scale=1):
@@ -71,12 +73,70 @@ class RRDB(nn.Module):
         return out * 0.2 + x
 
 
+def get_crops(image: torch.Tensor, max_img_size: int, borders: int = 40) -> List[List[torch.Tensor]]:
+    x_max, y_max = image.size()[-2:]
+
+    y_parts = y_max // max_img_size + (0 if y_max // max_img_size * max_img_size == y_max else 1)
+    x_parts = x_max // max_img_size + (0 if x_max // max_img_size * max_img_size == x_max else 1)
+
+    crops = [[0] * x_parts for _ in range(y_parts)]
+
+    for x in range(x_parts):
+        for y in range(y_parts):
+            crops[y][x] = (
+                image[
+                :,
+                :,
+                max(0, x * max_img_size - borders): min(x * max_img_size + max_img_size + borders, x_max),
+                max(0, y * max_img_size - borders): min(y * max_img_size + max_img_size + borders, y_max)
+                ]
+            )
+
+    return crops
+
+
+def get_img_from_crops(crops: List[List[torch.Tensor]], borders: int = 40) -> torch.Tensor:
+    res_img = [[torch.tensor(1.)] * len(crops[0]) for _ in range(len(crops))]
+
+    for y in range(len(crops)):
+        for x in range(len(crops[0])):
+            crop = crops[y][x]
+
+            if len(crops) == 1:
+                pass
+            elif y == 0:
+                crop = crop[:, :, :, 0: -borders]
+            elif y == len(crops) - 1:
+                crop = crop[:, :, :, borders:]
+            else:
+                crop = crop[:, :, :, borders: -borders]
+
+            if len(crops[0]) == 1:
+                pass
+            elif x == 0:
+                crop = crop[:, :, 0: -borders, :]
+            elif x == len(crops[0]) - 1:
+                crop = crop[:, :, borders:, :]
+            else:
+                crop = crop[:, :, borders: -borders, :]
+
+            res_img[y][x] = crop
+
+    return torch.cat([torch.cat(res_img[i], dim=2) for i in range(len(crops))], dim=3)
+
+
 class RRDBNet(nn.Module):
-    def __init__(self, in_nc=3, out_nc=3, nf=64, nb=23, gc=32, sf=4):
+    def __init__(
+            self, in_nc=3, out_nc=3, nf=64, nb=23, gc=32, sf=4, max_img_size=160, borders: int = 40, inference=False
+    ):
         super(RRDBNet, self).__init__()
+        self.max_img_size = max_img_size
+        self.inference = inference
+        self.borders = borders
         RRDB_block_f = functools.partial(RRDB, nf=nf, gc=gc)
         self.sf = sf
         assert sf in [2, 4]
+        assert 2 * borders < max_img_size
         print([in_nc, out_nc, nf, nb, gc, sf])
 
         self.conv_first = nn.Conv2d(in_nc, nf, 3, 1, 1, bias=True)
@@ -84,21 +144,36 @@ class RRDBNet(nn.Module):
         self.trunk_conv = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         #### upsampling
         self.upconv1 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
-        if self.sf==4:
+        if self.sf == 4:
             self.upconv2 = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         self.HRconv = nn.Conv2d(nf, nf, 3, 1, 1, bias=True)
         self.conv_last = nn.Conv2d(nf, out_nc, 3, 1, 1, bias=True)
 
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
-    def forward(self, x):
-        fea = self.conv_first(x)
-        trunk = self.trunk_conv(self.RRDB_trunk(fea))
-        fea = fea + trunk
+    def forward(self, x, force=False):
+        if self.inference \
+                and not force \
+                and self.borders is not None and self.borders > 0 \
+                and self.max_img_size is not None and self.max_img_size > 0:
+            crops = get_crops(x, self.max_img_size, self.borders)
+            logger = logging.getLogger("test_logger")
+            res_imgs = [[torch.tensor(1.)] * len(crops[0]) for _ in range(len(crops))]
+            logger.info(f"num of img parts: {len(crops[0]) * len(crops)}")
+            for y in range(len(crops)):
+                for x in range(len(crops[0])):
+                    logger.info(f"{x + y * len(crops[0]) + 1}: try to process x={x} and y={y} part of image matrix")
+                    res_imgs[y][x] = (self(crops[y][x], force=True))
 
-        fea = self.lrelu(self.upconv1(F.interpolate(fea, scale_factor=2, mode='nearest')))
-        if self.sf==4:
-            fea = self.lrelu(self.upconv2(F.interpolate(fea, scale_factor=2, mode='nearest')))
-        out = self.conv_last(self.lrelu(self.HRconv(fea)))
+            out = get_img_from_crops(res_imgs, self.borders * self.sf)
+        else:
+            fea = self.conv_first(x)
+            trunk = self.trunk_conv(self.RRDB_trunk(fea))
+            fea = fea + trunk
+
+            fea = self.lrelu(self.upconv1(F.interpolate(fea, scale_factor=2, mode='nearest')))
+            if self.sf == 4:
+                fea = self.lrelu(self.upconv2(F.interpolate(fea, scale_factor=2, mode='nearest')))
+            out = self.conv_last(self.lrelu(self.HRconv(fea)))
 
         return out
