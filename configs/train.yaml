@@ -36,7 +36,7 @@ discriminator_scheduler:
   type: torch.optim.lr_scheduler.StepLR
   step_size: 1
   gamma: 0.5
-#todo change it to abc generator
+
 generator_model:
   type: models.generator_rrdb.RRDBNet
   in_channels: 3

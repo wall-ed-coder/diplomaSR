@@ -98,24 +98,51 @@ class SRDatasets:
         self.test_dataset.update()
 
 
+# if __name__ == '__main__':
+#     transforms = AugmentationApplier()
+#
+#     ds = CommonSRDataset(
+#         csv_path='/Users/nikita/Desktop/диплом/diploma_sr2/test_df.csv',
+#         root_to_data='/Users/nikita/Downloads/',
+#         scale_coef=4,
+#         augmentation=transforms,
+#         dataloader_kwargs={'batch_size': 2},
+#         sizes_for_crops=[(64, 64),]
+#     )
+#
+#     dl = ds.get_dataloader()
+#     for epoch in range(3):
+#         for batch in dl:
+#             print(batch['sr_img'].shape, batch['lr_img'].shape)
+#             dl.dataset.update()
+#         print('finish epoch')
 if __name__ == '__main__':
+    from utils import visualize_img_from_array
     transforms = AugmentationApplier()
 
     ds = CommonSRDataset(
-        csv_path='/Users/nikita/Desktop/diploma_sr2/test_df.csv',
+        csv_path='/Users/nikita/Desktop/диплом/diploma_sr2/test_df.csv',
         root_to_data='/Users/nikita/Downloads/',
         scale_coef=4,
         augmentation=transforms,
-        dataloader_kwargs={'batch_size': 2},
-        sizes_for_crops=[(64, 64),]
+        sizes_for_crops=[(512, 512),],
+        dataloader_kwargs={'batch_size': 1, 'num_workers': 1},
     )
 
     dl = ds.get_dataloader()
-    for epoch in range(3):
+    for epoch in range(5):
         for batch in dl:
+            for sr_img, lr_img in zip(batch['sr_img'], batch['lr_img']):
+                visualize_img_from_array(sr_img)
+                visualize_img_from_array(lr_img)
+                # print(sr_img.shape, lr_img.shape)
             print(batch['sr_img'].shape, batch['lr_img'].shape)
             dl.dataset.update()
         print('finish epoch')
+
+
+
+
 
 
 
